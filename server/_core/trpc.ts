@@ -27,6 +27,16 @@ const requireUser = t.middleware(async opts => {
 
 export const protectedProcedure = t.procedure.use(requireUser);
 
+const requireClinician = t.middleware(async opts => {
+  const { ctx, next } = opts;
+  if (!ctx.clinician) {
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "Please sign in to your clinical workspace." });
+  }
+  return next({ ctx: { ...ctx, clinician: ctx.clinician } });
+});
+
+export const clinicianProcedure = t.procedure.use(requireClinician);
+
 export const adminProcedure = t.procedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;

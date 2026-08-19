@@ -21,16 +21,16 @@ export default function Home() {
         <a href="#top" className="neuro-brand" onClick={closeMenu}><NeuroLogo /></a>
         <nav className="neuro-nav" aria-label="Primary navigation">
           {navigation.map((item) => <a key={item.href} href={item.href}>{item.label}</a>)}
-          <a href="/signin">Sign in</a>
-          <a href="/create-account" className="neuro-get-started">Get started <ArrowUpRight size={14} strokeWidth={1.6} /></a>
+          <a href="/login">Sign in</a>
+          <a href="/signup" className="neuro-get-started">Get started <ArrowUpRight size={14} strokeWidth={1.6} /></a>
         </nav>
         <button type="button" className="neuro-menu" aria-label={menuOpen ? "Close menu" : "Open menu"} aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>
           {menuOpen ? <X size={21} strokeWidth={1.5} /> : <Menu size={21} strokeWidth={1.5} />}
         </button>
         {menuOpen && <nav className="neuro-mobile-nav" aria-label="Mobile navigation">
           {navigation.map((item) => <a key={item.href} href={item.href} onClick={closeMenu}>{item.label}</a>)}
-          <a href="/signin" onClick={closeMenu}>Sign in</a>
-          <a href="/create-account" onClick={closeMenu} className="primary-action">Get started <ArrowUpRight size={14} strokeWidth={1.6} /></a>
+          <a href="/login" onClick={closeMenu}>Sign in</a>
+          <a href="/signup" onClick={closeMenu} className="primary-action">Get started <ArrowUpRight size={14} strokeWidth={1.6} /></a>
         </nav>}
       </header>
 
@@ -41,8 +41,8 @@ export default function Home() {
             <p className="amber-label">AI-ASSISTED MRI ANALYSIS</p>
             <p className="neuro-hero-body">A clinical workspace for reviewing brain MRI studies and exploring AI-assisted tumor segmentation.</p>
             <div className="neuro-hero-actions">
-              <a href="/create-account" className="primary-action">Get started <ArrowRight size={16} strokeWidth={1.6} /></a>
-              <a href="/signin" className="neuro-text-link">Sign in</a>
+              <a href="/signup" className="primary-action">Get started <ArrowRight size={16} strokeWidth={1.6} /></a>
+              <a href="/login" className="neuro-text-link">Sign in</a>
             </div>
           </div>
           <div className="neuro-hero-visual" role="img" aria-label="A brain-like structure built from floating outlined triangular particles">
@@ -79,7 +79,7 @@ export default function Home() {
         </section>
 
         <section className="neuro-product neuro-section" id="product" aria-labelledby="product-title">
-          <div className="product-heading"><p className="amber-label">THE WORKSPACE</p><h2 id="product-title">One quiet place to look deeper.</h2><a href="/workspace" className="neuro-text-link">Open clinical workspace <ArrowUpRight size={16} strokeWidth={1.5} /></a></div>
+          <div className="product-heading"><p className="amber-label">THE WORKSPACE</p><h2 id="product-title">One quiet place to look deeper.</h2><a href="/login" className="neuro-text-link">Open clinical workspace <ArrowUpRight size={16} strokeWidth={1.5} /></a></div>
           <div className="product-mockup"><MriModalityTabs /><div className="mockup-rail"><span>SEGMENTATION</span><span>OPACITY 62%</span><span>SLICE 082</span><span>ZOOM · PAN</span></div></div>
         </section>
 
@@ -89,7 +89,7 @@ export default function Home() {
         </section>
 
         <section className="neuro-final-cta neuro-section" aria-labelledby="final-title">
-          <p className="amber-label">NEUROSCAN AI</p><h2 id="final-title">Ready to see<br />what the scan reveals?</h2><p>Create your clinical workspace and explore AI-assisted MRI analysis.</p><div><a href="/create-account" className="primary-action">Create account <ArrowRight size={16} strokeWidth={1.6} /></a><a href="/signin" className="neuro-text-link">Sign in</a></div>
+          <p className="amber-label">NEUROSCAN AI</p><h2 id="final-title">Ready to see<br />what the scan reveals?</h2><p>Create your clinical workspace and explore AI-assisted MRI analysis.</p><div><a href="/signup" className="primary-action">Create account <ArrowRight size={16} strokeWidth={1.6} /></a><a href="/login" className="neuro-text-link">Sign in</a></div>
         </section>
       </main>
 

@@ -8,6 +8,13 @@
       "when": 1787120501166,
       "tag": "0000_stale_boomerang",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1787122986581,
+      "tag": "0001_loud_young_avengers",
+      "breakpoints": true
     }
   ]
 }

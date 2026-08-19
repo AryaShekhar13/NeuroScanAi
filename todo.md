@@ -19,3 +19,12 @@
 - [x] Add the requested post-login dashboard summary and recent-studies view.
 - [x] Route the clinical product navigation to the dashboard and study-review experiences.
 - [x] Verify the updated content and tabs on desktop and mobile before checkpointing.
+- [x] Define clinician account, patient, study, study-file, analysis, reset-token, and audit data models.
+- [x] Implement credential signup, login, logout, secure HTTP-only sessions, and password-reset token flows.
+- [x] Apply the database migration for real authenticated clinical application records.
+- [x] Protect all doctor-facing routes and backend procedures with authenticated ownership checks.
+- [x] Implement persisted patient creation, MRI study creation, file upload metadata, and mock analysis job workflows.
+- [x] Replace visual-only dashboard data with scoped database queries and real application routes.
+- [x] Test signup, login failure, logout, protected-route redirects, database ownership rules, and file persistence.
+- [x] Browser-verify the password-reset redirect lands on the current protected `/app` dashboard route.
+- [x] Align the protected dashboard entry and post-authentication redirects with the specified `/app` route.

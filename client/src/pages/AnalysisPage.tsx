@@ -1,0 +1,5 @@
+import { ArrowUpRight, LoaderCircle } from "lucide-react";
+import ClinicalShell from "@/components/ClinicalShell";
+import { trpc } from "@/lib/trpc";
+
+export default function AnalysisPage() { const jobs = trpc.analysis.list.useQuery(); return <ClinicalShell active="/analysis"><main className="app-main"><p className="amber-label">AI-ASSISTED WORKFLOW</p><h1>Analysis</h1><p className="app-subtitle">Demo / mock analysis jobs illustrate workflow status only. They are not clinical AI output.</p><section className="data-list">{jobs.isLoading ? <p className="app-loading"><LoaderCircle className="spin-icon" size={18} /> Retrieving analysis jobs</p> : jobs.data?.length ? jobs.data.map(({ job, study, patient }) => <a href={`/studies/${study.id}`} className="data-row" key={job.id}><span>{patient.displayName}<em>{job.modelName} · demo</em></span><span>{job.status.replaceAll("_", " ")}</span><span>Open study <ArrowUpRight size={15} /></span></a>) : <p className="app-empty">No analysis jobs yet. Create an MRI study, then start a demo / mock analysis from the study view.</p>}</section></main></ClinicalShell>; }

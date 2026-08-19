@@ -36,3 +36,9 @@
 - [x] Expand study-file metadata, secure storage access, and privacy safeguards for confidential MRI data.
 - [x] Add environment-variable documentation and test hardened authentication and MRI upload flows.
 - [x] Document the required deployment configuration for SMTP, application URLs, and MRI upload limits.
+- [x] Inspect the supplied synthetic MRI PNG sequence and map it to a numerically ordered viewer dataset.
+- [x] Replace the placeholder slice control with an accessible MRI volume slice navigator while retaining a separate segmentation-opacity slider.
+- [x] Add previous/next buttons, slider dragging, keyboard navigation, nearby-slice preloading, and image loading/error feedback.
+- [x] Verify the first, last, and intermediate synthetic slices; modality switching; and responsive viewer behavior before checkpointing.
+- [x] Correct the managed URL mapping for every supplied synthetic MRI slice and add coverage for asset availability.
+- [x] Re-verify the full slice range and responsive MRI navigator presentation on desktop and mobile after correcting the asset mapping.

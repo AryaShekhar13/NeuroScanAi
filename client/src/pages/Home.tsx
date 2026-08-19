@@ -1,190 +1,99 @@
-/**
-/**
- * Dala design reminder: editorial asymmetry, giant regular-weight typography, a black-void canvas,
- * and the constellation as the sole hero image. Never introduce cards, shadows, or UI gradients.
- */
-import { ArrowDownRight, ArrowUpRight, Menu, X } from "lucide-react";
+/** NeuroScan AI is an immersive clinical-AI research introduction, not a conventional SaaS landing page. */
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Menu, X } from "lucide-react";
 import { useState } from "react";
-import AccessRequestForm from "@/components/AccessRequestForm";
+import MriModalityTabs from "@/components/MriModalityTabs";
+import { NeuroLogo } from "@/components/NeuroLogo";
 import ParticleConstellation from "@/components/ParticleConstellation";
 
-const logoUrl = "/manus-storage/dala-logo-mark_e0a5fb13.png";
-const heroUrl = "/manus-storage/dala-constellation-hero_f9405f97.png";
-const fieldUrl = "/manus-storage/dala-constellation-field_7059d0bf.png";
-const knowledgeUrl = "/manus-storage/dala-constellation-knowledge_113578bb.png";
-
 const navigation = [
-  { label: "Manifesto", href: "#manifesto" },
-  { label: "How it works", href: "#how-it-works" },
-  { label: "Notes", href: "#notes" },
-  { label: "Workspace", href: "/library" },
+  { label: "Product", href: "#product" },
+  { label: "How it works", href: "#workflow" },
+  { label: "For clinicians", href: "#clinicians" },
 ];
 
 export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
-
   const closeMenu = () => setMenuOpen(false);
 
   return (
-    <div className="dala-page">
-      <header className="site-header">
-        <a className="brand-lockup" href="#top" aria-label="Dala home" onClick={closeMenu}>
-          <img src={logoUrl} alt="" className="brand-mark" />
-          <span>Dala</span>
-        </a>
-
-        <nav className="desktop-nav" aria-label="Primary navigation">
-          {navigation.map((item) => (
-            <a key={item.href} href={item.href} className="nav-link">
-              {item.label}
-            </a>
-          ))}
+    <div className="neuro-page">
+      <header className="neuro-header">
+        <a href="#top" className="neuro-brand" onClick={closeMenu}><NeuroLogo /></a>
+        <nav className="neuro-nav" aria-label="Primary navigation">
+          {navigation.map((item) => <a key={item.href} href={item.href}>{item.label}</a>)}
+          <a href="/signin">Sign in</a>
+          <a href="/create-account" className="neuro-get-started">Get started <ArrowUpRight size={14} strokeWidth={1.6} /></a>
         </nav>
-
-        <a href="#access" className="request-link desktop-cta">
-          Request access <ArrowUpRight size={15} strokeWidth={1.6} />
-        </a>
-
-        <button
-          type="button"
-          className="menu-button"
-          aria-label={menuOpen ? "Close menu" : "Open menu"}
-          aria-expanded={menuOpen}
-          onClick={() => setMenuOpen((open) => !open)}>
+        <button type="button" className="neuro-menu" aria-label={menuOpen ? "Close menu" : "Open menu"} aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>
           {menuOpen ? <X size={21} strokeWidth={1.5} /> : <Menu size={21} strokeWidth={1.5} />}
         </button>
-
-        {menuOpen && (
-          <nav className="mobile-nav" aria-label="Mobile navigation">
-            {navigation.map((item) => (
-              <a key={item.href} href={item.href} onClick={closeMenu}>
-                {item.label}
-              </a>
-            ))}
-            <a href="#access" onClick={closeMenu} className="request-link">
-              Request access <ArrowUpRight size={15} strokeWidth={1.6} />
-            </a>
-          </nav>
-        )}
+        {menuOpen && <nav className="neuro-mobile-nav" aria-label="Mobile navigation">
+          {navigation.map((item) => <a key={item.href} href={item.href} onClick={closeMenu}>{item.label}</a>)}
+          <a href="/signin" onClick={closeMenu}>Sign in</a>
+          <a href="/create-account" onClick={closeMenu} className="primary-action">Get started <ArrowUpRight size={14} strokeWidth={1.6} /></a>
+        </nav>}
       </header>
 
       <main id="top">
-        <section className="hero-section" aria-labelledby="hero-title">
-          <div className="hero-copy reveal-up">
-            <p className="eyebrow">COLLECTIVE INTELLIGENCE, ON DEMAND</p>
-            <h1 id="hero-title">
-              Your workplace has the answer.
-              <span>Just ask Dala for it.</span>
-            </h1>
-            <p className="hero-body">
-              Dala turns scattered expertise into a conversation your team can actually use. Find
-              the context, the decisions, and the people behind the work—without changing how you
-              work.
-            </p>
-            <a href="#access" className="primary-action">
-              Request access <ArrowUpRight size={16} strokeWidth={1.7} />
-            </a>
+        <section className="neuro-hero" aria-labelledby="hero-title">
+          <div className="neuro-hero-copy reveal-up">
+            <h1 id="hero-title">Understand <span>what lies</span><span>beneath the scan.</span></h1>
+            <p className="amber-label">AI-ASSISTED MRI ANALYSIS</p>
+            <p className="neuro-hero-body">A clinical workspace for reviewing brain MRI studies and exploring AI-assisted tumor segmentation.</p>
+            <div className="neuro-hero-actions">
+              <a href="/create-account" className="primary-action">Get started <ArrowRight size={16} strokeWidth={1.6} /></a>
+              <a href="/signin" className="neuro-text-link">Sign in</a>
+            </div>
           </div>
-
-          <div className="hero-visual" role="img" aria-label="A constellation of colorful triangular particles forming a neural cloud">
-            <img src={heroUrl} alt="" className="hero-art" fetchPriority="high" decoding="async" />
+          <div className="neuro-hero-visual" role="img" aria-label="A brain-like structure built from floating outlined triangular particles">
             <ParticleConstellation />
-            <p className="visual-caption">a field of shared intelligence</p>
+            <p>mri data / neural computation / clinical insight</p>
           </div>
-
-          <div className="hero-scroll-cue" aria-hidden="true">
-            <span>SCROLL TO FIND THE THREAD</span>
-            <ArrowDownRight size={17} strokeWidth={1.3} />
-          </div>
+          <div className="neuro-scroll-cue" aria-hidden="true">Enter the field <ArrowDownRight size={16} strokeWidth={1.3} /></div>
         </section>
 
-        <section id="manifesto" className="statement-section section-shell" aria-labelledby="manifesto-title">
-          <div className="section-index">01 / THE MANIFESTO</div>
-          <div className="statement-grid">
-            <h2 id="manifesto-title" className="statement-title">
-              Knowing more should not mean searching harder.
-            </h2>
-            <div className="statement-copy-wrap">
-              <p className="amber-label">THE WORK IS ALREADY HERE</p>
-              <p className="statement-copy">
-                Your company has a memory. It lives in launch plans, meeting notes, code reviews,
-                messages, and the people who made the calls. Dala makes that memory present.
-              </p>
-              <a href="#how-it-works" className="text-action">
-                See the system at work <ArrowDownRight size={18} strokeWidth={1.5} />
-              </a>
-            </div>
-          </div>
+        <section className="neuro-problem neuro-section" aria-labelledby="problem-title">
+          <p className="amber-label">THE PROBLEM</p>
+          <h2 id="problem-title">MRI studies contain enormous amounts of information.</h2>
+          <p>Finding the relevant patterns shouldn’t mean fighting through complexity.</p>
         </section>
 
-        <section id="how-it-works" className="knowledge-section section-shell" aria-labelledby="knowledge-title">
-          <div className="knowledge-art-wrap" aria-hidden="true">
-            <img src={knowledgeUrl} alt="" className="knowledge-art" loading="lazy" decoding="async" />
-            <div className="art-note art-note-top">source signals</div>
-            <div className="art-note art-note-bottom">context, not just content</div>
-          </div>
-          <div className="knowledge-copy">
-            <p className="amber-label">02 / THE CONNECTION</p>
-            <h2 id="knowledge-title">Every answer keeps its point of origin.</h2>
-            <p>
-              Dala holds on to the detail that turns a plausible reply into a trusted one: where
-              it came from, when it changed, and who can take the conversation further.
-            </p>
-            <dl className="principles-list">
-              <div>
-                <dt>Context stays attached</dt>
-                <dd>Follow ideas back to the moment they were made.</dd>
-              </div>
-              <div>
-                <dt>Expertise remains human</dt>
-                <dd>Know who understands the work—and why.</dd>
-              </div>
-              <div>
-                <dt>Learning compounds</dt>
-                <dd>Let each answer create a clearer next question.</dd>
-              </div>
-            </dl>
-          </div>
+        <section className="neuro-idea neuro-section" aria-labelledby="idea-title">
+          <div><p className="amber-label">THE IDEA</p><h2 id="idea-title">From scan<br />to insight.</h2></div>
+          <p>NeuroScan AI brings MRI studies, segmentation, and review into one focused clinical workspace.</p>
         </section>
 
-        <section id="notes" className="notes-section section-shell" aria-labelledby="notes-title">
-          <div className="notes-head">
-            <p className="amber-label">03 / NOTES FROM THE FIELD</p>
-            <h2 id="notes-title">The best work is a relay, not a reset.</h2>
-          </div>
-          <div className="notes-visual">
-            <img src={fieldUrl} alt="Colorful outlined triangular particles crossing a black field" loading="lazy" decoding="async" />
-            <p>
-              Intelligence is not a single answer. It is the trace of decisions, questions, and
-              people learning from one another.
-            </p>
-          </div>
+        <section className="neuro-data neuro-section" aria-labelledby="data-title">
+          <div className="data-copy"><p className="amber-label">MULTI-MODAL MRI</p><h2 id="data-title">Four views.<br />One study.</h2><p>Multiple MRI modalities gather into one review surface, so each sequence keeps its clinical context.</p></div>
+          <MriModalityTabs compact />
         </section>
 
-        <section id="access" className="access-section section-shell" aria-labelledby="access-title">
-          <p className="section-index">04 / COME BUILD THE MEMORY</p>
-          <div className="access-layout">
-            <h2 id="access-title">A clearer workplace begins with a better question.</h2>
-            <div className="access-aside">
-              <p>
-                Dala is being shaped with teams who want their accumulated knowledge to feel
-                alive, shared, and useful.
-              </p>
-              <AccessRequestForm />
-              <p className="access-footnote">Early access is opening in small cohorts.</p>
-            </div>
-          </div>
+        <section className="neuro-segmentation neuro-section" aria-labelledby="segmentation-title">
+          <div className="segmentation-brain" aria-hidden="true"><ParticleConstellation /></div>
+          <div className="segmentation-copy"><p className="amber-label">AI-ASSISTED SEGMENTATION</p><h2 id="segmentation-title">Find the pattern.</h2><p>AI-generated segmentation helps clinicians inspect regions of interest within the MRI study. It supports review; it does not replace clinical judgment.</p></div>
+        </section>
+
+        <section className="neuro-review neuro-section" id="clinicians" aria-labelledby="review-title">
+          <div><p className="amber-label">CLINICAL REVIEW</p><h2 id="review-title">The clinician stays<br />in control.</h2><p>Review the original MRI, inspect segmentation overlays, move through slices, and make the final clinical judgment.</p></div>
+          <div className="review-orbit" aria-label="Clinical review controls illustration"><span>T1</span><span>T1CE</span><span>T2</span><span>FLAIR</span><span>SEGMENTATION</span><span>OPACITY</span><i /></div>
+        </section>
+
+        <section className="neuro-product neuro-section" id="product" aria-labelledby="product-title">
+          <div className="product-heading"><p className="amber-label">THE WORKSPACE</p><h2 id="product-title">One quiet place to look deeper.</h2><a href="/workspace" className="neuro-text-link">Open clinical workspace <ArrowUpRight size={16} strokeWidth={1.5} /></a></div>
+          <div className="product-mockup"><MriModalityTabs /><div className="mockup-rail"><span>SEGMENTATION</span><span>OPACITY 62%</span><span>SLICE 082</span><span>ZOOM · PAN</span></div></div>
+        </section>
+
+        <section className="neuro-workflow neuro-section" id="workflow" aria-labelledby="workflow-title">
+          <p className="amber-label">SIMPLE WORKFLOW</p><h2 id="workflow-title">From image to clinical review.</h2>
+          <ol>{[["01", "Upload MRI"], ["02", "AI analysis"], ["03", "Segmentation"], ["04", "Clinical review"]].map(([number, label]) => <li key={number}><span>{number}</span><p>{label}</p></li>)}</ol>
+        </section>
+
+        <section className="neuro-final-cta neuro-section" aria-labelledby="final-title">
+          <p className="amber-label">NEUROSCAN AI</p><h2 id="final-title">Ready to see<br />what the scan reveals?</h2><p>Create your clinical workspace and explore AI-assisted MRI analysis.</p><div><a href="/create-account" className="primary-action">Create account <ArrowRight size={16} strokeWidth={1.6} /></a><a href="/signin" className="neuro-text-link">Sign in</a></div>
         </section>
       </main>
 
-      <footer className="site-footer section-shell">
-        <a className="brand-lockup" href="#top" aria-label="Back to top">
-          <img src={logoUrl} alt="" className="brand-mark" />
-          <span>Dala</span>
-        </a>
-        <p>Knowledge moves when people can find one another.</p>
-        <p>© 2026 Dala</p>
-      </footer>
+      <footer className="neuro-footer"><a href="#top"><NeuroLogo /></a><p>AI-assisted MRI analysis for focused clinical review.</p><p>© 2026 NeuroScan AI</p></footer>
     </div>
   );
 }

@@ -1,35 +1,26 @@
-/** Dala design reminder: keep the global shell locked to the pure-black dark stage. */
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import Workspace from "@/pages/Workspace";
+import AuthPage from "@/pages/AuthPage";
+import ClinicalWorkspace from "@/pages/ClinicalWorkspace";
+import Dashboard from "@/pages/Dashboard";
+import Home from "@/pages/Home";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import Home from "./pages/Home";
 
 function Router() {
-  return (
-    <Switch>
-      <Route path="/" component={Home} />
-      <Route path="/library" component={Workspace} />
-      <Route path="/404" component={NotFound} />
-      <Route component={NotFound} />
-    </Switch>
-  );
+  return <Switch>
+    <Route path="/" component={Home} />
+    <Route path="/dashboard" component={Dashboard} />
+    <Route path="/workspace" component={ClinicalWorkspace} />
+    <Route path="/signin">{() => <AuthPage mode="signin" />}</Route>
+    <Route path="/create-account">{() => <AuthPage mode="signup" />}</Route>
+    <Route path="/404" component={NotFound} />
+    <Route component={NotFound} />
+  </Switch>;
 }
 
-function App() {
-  return (
-    <ErrorBoundary>
-      <ThemeProvider defaultTheme="dark">
-        <TooltipProvider>
-          <Toaster />
-          <Router />
-        </TooltipProvider>
-      </ThemeProvider>
-    </ErrorBoundary>
-  );
+export default function App() {
+  return <ErrorBoundary><ThemeProvider defaultTheme="dark"><TooltipProvider><Toaster /><Router /></TooltipProvider></ThemeProvider></ErrorBoundary>;
 }
-
-export default App;

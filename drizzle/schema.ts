@@ -110,6 +110,17 @@ export const authRateLimits = mysqlTable("authRateLimits", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (table) => [index("authRateLimits_scope_key_idx").on(table.scope, table.keyHash)]);
 
+/** A hashed, server-enforced allowance for one anonymous demonstration analysis per visitor. */
+export const demoVisitors = mysqlTable("demoVisitors", {
+  id: int("id").autoincrement().primaryKey(),
+  tokenHash: varchar("tokenHash", { length: 64 }).notNull().unique(),
+  ipHash: varchar("ipHash", { length: 64 }).notNull(),
+  visitorBindingHash: varchar("visitorBindingHash", { length: 64 }).notNull().unique(),
+  usedAt: timestamp("usedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => [index("demoVisitors_ip_createdAt_idx").on(table.ipHash, table.createdAt)]);
+
 /** Public requests from the original landing experience. */
 export const accessRequests = mysqlTable("accessRequests", {
   id: int("id").autoincrement().primaryKey(),

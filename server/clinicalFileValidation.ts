@@ -8,6 +8,8 @@ export type ClinicalUploadPayload = { fileName: string; mimeType: string; base64
 const FALLBACK_SINGLE_FILE_LIMIT = 8 * 1024 * 1024;
 const FALLBACK_STUDY_LIMIT = 32 * 1024 * 1024;
 const FALLBACK_FOLDER_LIMIT = 200;
+/** A separate cap prevents gzip bombs while allowing valid compressed clinical volumes larger than their transport size. */
+export const MAX_DECOMPRESSED_NIFTI_BYTES = 64 * 1024 * 1024;
 
 function positiveEnv(name: string, fallback: number) {
   const value = Number(process.env[name]);
@@ -25,7 +27,7 @@ export function uploadLimits() {
 export function cleanClinicalFileName(fileName: string) {
   const baseName = fileName.replace(/\\/g, "/").split("/").pop() || "";
   const cleaned = baseName.trim().replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-");
-  return cleaned || "mri-upload.nii";
+  return cleaned || "mri-upload.nii.gz";
 }
 
 export function cleanRelativePath(relativePath?: string) {
@@ -36,8 +38,7 @@ export function cleanRelativePath(relativePath?: string) {
 }
 
 export function isNiftiFilename(fileName: string) {
-  const lower = fileName.toLowerCase();
-  return lower.endsWith(".nii") || lower.endsWith(".nii.gz");
+  return fileName.toLowerCase().endsWith(".nii.gz");
 }
 
 export function detectMriModality(fileName: string): MriModality | null {
@@ -71,25 +72,25 @@ function parseNiftiMetadata(bytes: Buffer) {
 
 export function decodeClinicalUpload(payload: ClinicalUploadPayload) {
   const fileName = cleanClinicalFileName(payload.fileName);
-  if (!isNiftiFilename(fileName)) throw new Error("Unsupported file. Only NIfTI (.nii, .nii.gz) MRI files are accepted.");
+  if (!isNiftiFilename(fileName)) throw new Error("Unsupported file. Only compressed NIfTI (.nii.gz) MRI files are accepted.");
   const allowedMimeTypes = new Set(["", "application/octet-stream", "application/x-nifti", "application/gzip", "application/x-gzip"]);
   if (!allowedMimeTypes.has(payload.mimeType.toLowerCase())) throw new Error("File validation failed.");
   if (!/^[A-Za-z0-9+/=]+$/.test(payload.base64)) throw new Error("File validation failed.");
   const compressedBytes = Buffer.from(payload.base64, "base64");
   const { maxSingleFileSize } = uploadLimits();
   if (!compressedBytes.length || compressedBytes.length > maxSingleFileSize) throw new Error("This MRI file exceeds the configured upload limit.");
-  const compressed = fileName.toLowerCase().endsWith(".nii.gz");
+  const compressed = true;
   let niftiBytes: Uint8Array = compressedBytes;
   try {
     if (compressed) {
       if (compressedBytes[0] !== 0x1f || compressedBytes[1] !== 0x8b) throw new Error("not gzip");
-      niftiBytes = gunzipSync(compressedBytes, { maxOutputLength: maxSingleFileSize });
+      niftiBytes = gunzipSync(compressedBytes, { maxOutputLength: MAX_DECOMPRESSED_NIFTI_BYTES });
     }
   } catch {
     throw new Error("File validation failed.");
   }
   const validationBytes = Buffer.from(niftiBytes);
-  if (validationBytes.length > maxSingleFileSize || !isNiftiHeader(validationBytes)) throw new Error("File validation failed.");
+  if (validationBytes.length > MAX_DECOMPRESSED_NIFTI_BYTES || !isNiftiHeader(validationBytes)) throw new Error("File validation failed.");
   const modality = detectMriModality(fileName);
   if (!modality) throw new Error("Unsupported file. A T1, T1CE, T2, or FLAIR modality name is required.");
   return {

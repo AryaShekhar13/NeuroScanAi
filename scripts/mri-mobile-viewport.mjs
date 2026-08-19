@@ -37,6 +37,6 @@ if (mode === "mobile") {
 }
 
 await new Promise((resolve) => setTimeout(resolve, 1000));
-const viewport = await call("Runtime.evaluate", { expression: "JSON.stringify({ width: window.innerWidth, height: window.innerHeight, sliceControlColumns: getComputedStyle(document.querySelector('.slice-controls')).gridTemplateColumns })", returnByValue: true });
+const viewport = await call("Runtime.evaluate", { expression: "(() => { const controls = document.querySelector('.slice-controls'); return JSON.stringify({ width: window.innerWidth, height: window.innerHeight, sliceControlColumns: controls ? getComputedStyle(controls).gridTemplateColumns : 'pending-reload' }); })()", returnByValue: true });
 console.log(JSON.stringify(viewport));
 socket.close();

@@ -2,6 +2,7 @@
 import { ArrowDownRight, ArrowRight, ArrowUpRight, Menu, X } from "lucide-react";
 import { useState } from "react";
 import MriModalityTabs from "@/components/MriModalityTabs";
+import { MriReferenceSlice } from "@/components/MriReferenceSlice";
 import { NeuroLogo } from "@/components/NeuroLogo";
 import ParticleConstellation from "@/components/ParticleConstellation";
 
@@ -22,7 +23,7 @@ export default function Home() {
         <nav className="neuro-nav" aria-label="Primary navigation">
           {navigation.map((item) => <a key={item.href} href={item.href}>{item.label}</a>)}
           <a href="/login">Sign in</a>
-          <a href="/signup" className="neuro-get-started">Get started <ArrowUpRight size={14} strokeWidth={1.6} /></a>
+          <a href="/demo" className="neuro-get-started">Try one free analysis <ArrowUpRight size={14} strokeWidth={1.6} /></a>
         </nav>
         <button type="button" className="neuro-menu" aria-label={menuOpen ? "Close menu" : "Open menu"} aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>
           {menuOpen ? <X size={21} strokeWidth={1.5} /> : <Menu size={21} strokeWidth={1.5} />}
@@ -30,7 +31,7 @@ export default function Home() {
         {menuOpen && <nav className="neuro-mobile-nav" aria-label="Mobile navigation">
           {navigation.map((item) => <a key={item.href} href={item.href} onClick={closeMenu}>{item.label}</a>)}
           <a href="/login" onClick={closeMenu}>Sign in</a>
-          <a href="/signup" onClick={closeMenu} className="primary-action">Get started <ArrowUpRight size={14} strokeWidth={1.6} /></a>
+          <a href="/demo" onClick={closeMenu} className="primary-action">Try one free analysis <ArrowUpRight size={14} strokeWidth={1.6} /></a>
         </nav>}
       </header>
 
@@ -41,7 +42,7 @@ export default function Home() {
             <p className="amber-label">AI-ASSISTED MRI ANALYSIS</p>
             <p className="neuro-hero-body">A clinical workspace for reviewing brain MRI studies and exploring AI-assisted tumor segmentation.</p>
             <div className="neuro-hero-actions">
-              <a href="/signup" className="primary-action">Get started <ArrowRight size={16} strokeWidth={1.6} /></a>
+              <a href="/demo" className="primary-action">Try one free analysis <ArrowRight size={16} strokeWidth={1.6} /></a>
               <a href="/login" className="neuro-text-link">Sign in</a>
             </div>
           </div>
@@ -64,8 +65,9 @@ export default function Home() {
         </section>
 
         <section className="neuro-data neuro-section" aria-labelledby="data-title">
-          <div className="data-copy"><p className="amber-label">MULTI-MODAL MRI</p><h2 id="data-title">Four views.<br />One study.</h2><p>Multiple MRI modalities gather into one review surface, so each sequence keeps its clinical context.</p></div>
-          <MriModalityTabs compact />
+          <div className="data-copy"><p className="amber-label">MULTI-MODAL MRI</p><h2 id="data-title">One brain.<br />Four perspectives.</h2><p>NeuroScan AI brings complementary MRI modalities together for AI-assisted analysis and clinical review.</p></div>
+          <div className="mri-reference-grid" aria-label="Reference MRI previews from one multi-modal study">{(["t1", "t1ce", "t2", "flair"] as const).map((modality) => <figure key={modality}><MriReferenceSlice modality={modality} sliceIndex={77} labelPrefix="Demo MRI" /><figcaption>{modality.toUpperCase()}</figcaption></figure>)}</div>
+          <a href="/demo" className="neuro-text-link mri-workspace-link">Explore the MRI workspace <ArrowRight size={16} strokeWidth={1.5} /></a>
         </section>
 
         <section className="neuro-segmentation neuro-section" aria-labelledby="segmentation-title">

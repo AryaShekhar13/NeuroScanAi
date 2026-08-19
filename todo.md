@@ -42,3 +42,13 @@
 - [x] Verify the first, last, and intermediate synthetic slices; modality switching; and responsive viewer behavior before checkpointing.
 - [x] Correct the managed URL mapping for every supplied synthetic MRI slice and add coverage for asset availability.
 - [x] Re-verify the full slice range and responsive MRI navigator presentation on desktop and mobile after correcting the asset mapping.
+- [x] Inspect the supplied BraTS compressed NIfTI volumes and verify secure four-modality detection under the `.nii.gz`-only criterion.
+- [x] Replace synthetic viewer placeholders with safe derived slice representations from the supplied T1, T1CE, T2, and FLAIR volumes while keeping raw NIfTI data private.
+- [x] Implement backend-tracked, one-time visitor demo access with secure server-side enforcement and a post-use account prompt.
+- [x] Update public CTA and demo intake UX for multi-file and folder uploads without weakening existing authenticated clinician workflows.
+- [x] Verify real-volume viewer modality switching, slice navigation, upload validation, demo limits, authentication routing, and responsive behavior before checkpointing.
+- [x] Strengthen server-side one-time demo enforcement beyond a removable browser cookie while retaining privacy-preserving visitor identifiers.
+- [x] Verify the public demo rejects unsupported uploads and document its responsive behavior alongside the protected real-volume viewer.
+- [x] Make the mobile viewport verification helper tolerate reload timing when restoring the desktop study viewer.
+- [x] Confirm the verification record documents the browser rejection result and the public-demo and protected-viewer responsive checks.
+- [x] Reapply and read back the public-demo rejection and responsive-verification record before the release checkpoint.

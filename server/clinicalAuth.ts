@@ -8,7 +8,9 @@ import type { Response } from "express";
 import { ENV } from "./_core/env";
 
 const SESSION_COOKIE = "neuroscan_clinician_session";
+const DEMO_VISITOR_COOKIE = "neuroscan_demo_visitor";
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
+const DEMO_VISITOR_TTL_SECONDS = 60 * 60 * 24 * 365;
 const scrypt = promisify(scryptCallback);
 
 export type ClinicianSession = { clinicianId: number; sessionVersion: number };
@@ -80,4 +82,21 @@ export function hashRateLimitKey(scope: string, identifier: string) {
   return createHash("sha256").update(`${scope}:${identifier.trim().toLowerCase()}`).digest("hex");
 }
 
-export { SESSION_COOKIE };
+export function createDemoVisitorToken() {
+  return randomBytes(32).toString("base64url");
+}
+
+export function hashDemoVisitorToken(token: string) {
+  return createHash("sha256").update(`demo-visitor:${token}`).digest("hex");
+}
+
+export function readDemoVisitorToken(cookieHeader?: string) {
+  const token = parse(cookieHeader || "")[DEMO_VISITOR_COOKIE];
+  return token && /^[A-Za-z0-9_-]{32,128}$/.test(token) ? token : null;
+}
+
+export function setDemoVisitorCookie(res: Response, token: string) {
+  res.cookie(DEMO_VISITOR_COOKIE, token, { httpOnly: true, secure: ENV.isProduction, sameSite: "lax", path: "/", maxAge: DEMO_VISITOR_TTL_SECONDS * 1000 });
+}
+
+export { SESSION_COOKIE, DEMO_VISITOR_COOKIE };

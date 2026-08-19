@@ -6,6 +6,7 @@ import {
   auditLogs,
   authRateLimits,
   clinicianAccounts,
+  demoVisitors,
   InsertUser,
   patients,
   studies,
@@ -127,6 +128,26 @@ export async function registerAuthRateAttempt(scope: string, keyHash: string, su
 export async function createAuditLog(userId: number | null, action: string, resourceType: string, resourceId?: string, metadata?: Record<string, unknown>) {
   const db = requireDb(await getDb());
   await db.insert(auditLogs).values({ userId, action, resourceType, resourceId: resourceId ?? null, metadata: metadata ?? null });
+}
+
+export async function getOrCreateDemoVisitor(tokenHash: string, ipHash: string, visitorBindingHash: string) {
+  const db = requireDb(await getDb());
+  const existing = (await db.select().from(demoVisitors).where(eq(demoVisitors.tokenHash, tokenHash)).limit(1))[0];
+  if (existing) return existing;
+  const boundVisitor = (await db.select().from(demoVisitors).where(eq(demoVisitors.visitorBindingHash, visitorBindingHash)).limit(1))[0];
+  if (boundVisitor) return boundVisitor;
+  try {
+    const result = await db.insert(demoVisitors).values({ tokenHash, ipHash, visitorBindingHash });
+    return (await db.select().from(demoVisitors).where(eq(demoVisitors.id, Number(result[0].insertId))).limit(1))[0]!;
+  } catch {
+    return (await db.select().from(demoVisitors).where(eq(demoVisitors.visitorBindingHash, visitorBindingHash)).limit(1))[0]!;
+  }
+}
+
+export async function consumeDemoVisitor(tokenHash: string, visitorBindingHash: string) {
+  const db = requireDb(await getDb());
+  const result = await db.update(demoVisitors).set({ usedAt: new Date() }).where(and(eq(demoVisitors.tokenHash, tokenHash), eq(demoVisitors.visitorBindingHash, visitorBindingHash), isNull(demoVisitors.usedAt)));
+  return Number(result[0].affectedRows) === 1;
 }
 
 export async function listPatients(ownerId: number, search?: string) {

@@ -12,6 +12,7 @@ import AnalysisPage from "@/pages/AnalysisPage";
 import SettingsPage from "@/pages/SettingsPage";
 import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
 import ResetPasswordPage from "@/pages/ResetPasswordPage";
+import DemoPage from "@/pages/DemoPage";
 import { ClinicianRouteGuard } from "@/hooks/useClinicianAuth";
 import Home from "@/pages/Home";
 import { Route, Switch } from "wouter";
@@ -21,6 +22,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 function Router() {
   return <Switch>
     <Route path="/" component={Home} />
+    <Route path="/demo" component={DemoPage} />
     <Route path="/app">{() => <ClinicianRouteGuard><Dashboard /></ClinicianRouteGuard>}</Route>
     <Route path="/dashboard">{() => <ClinicianRouteGuard><Dashboard /></ClinicianRouteGuard>}</Route>
     <Route path="/patients">{() => <ClinicianRouteGuard><PatientsPage /></ClinicianRouteGuard>}</Route>

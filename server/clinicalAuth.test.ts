@@ -1,7 +1,7 @@
 import { scrypt as scryptCallback } from "node:crypto";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
-import { hashPassword, hashResetToken, verifyPassword } from "./clinicalAuth";
+import { createDemoVisitorToken, hashDemoVisitorToken, hashPassword, hashResetToken, readDemoVisitorToken, verifyPassword } from "./clinicalAuth";
 
 describe("clinical credential security", () => {
   it("stores a salted password hash and verifies only the correct password", async () => {
@@ -23,5 +23,14 @@ describe("clinical credential security", () => {
   it("creates one-way reset token hashes", () => {
     expect(hashResetToken("reset-token-value")).not.toBe("reset-token-value");
     expect(hashResetToken("reset-token-value")).toBe(hashResetToken("reset-token-value"));
+  });
+
+  it("creates opaque, one-way-hashed demo visitor tokens from cookies", () => {
+    const token = createDemoVisitorToken();
+    expect(token).toMatch(/^[A-Za-z0-9_-]{32,128}$/);
+    expect(hashDemoVisitorToken(token)).toHaveLength(64);
+    expect(hashDemoVisitorToken(token)).not.toBe(token);
+    expect(readDemoVisitorToken(`neuroscan_demo_visitor=${token}`)).toBe(token);
+    expect(readDemoVisitorToken("neuroscan_demo_visitor=invalid!token")).toBeNull();
   });
 });

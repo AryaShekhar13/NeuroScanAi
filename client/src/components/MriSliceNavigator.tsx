@@ -1,18 +1,18 @@
 import { type KeyboardEvent, useEffect, useId, useState } from "react";
 import { ChevronLeft, ChevronRight, LoaderCircle, RotateCcw } from "lucide-react";
 import { MRI_MODALITIES } from "@/lib/mriModalities";
-import { SYNTHETIC_DEMO_VOLUMES, clampSliceIndex, neighboringSliceIndices, nextSliceIndex, previousSliceIndex, sliceIndexForKey, type MriModalityId } from "@/lib/mriVolume";
+import { REFERENCE_MRI_VOLUMES, clampSliceIndex, neighboringSliceIndices, nextSliceIndex, previousSliceIndex, sliceIndexForKey, type MriModalityId } from "@/lib/mriVolume";
+import { MriReferenceSlice } from "@/components/MriReferenceSlice";
 
 type ImageStatus = "loading" | "ready" | "error";
 
 export default function MriSliceNavigator() {
   const [activeModality, setActiveModality] = useState<MriModalityId>("t1");
-  const [currentSlice, setCurrentSlice] = useState(0);
+  const [currentSlice, setCurrentSlice] = useState(77);
   const [imageStatus, setImageStatus] = useState<ImageStatus>("loading");
   const [retryKey, setRetryKey] = useState(0);
   const baseId = useId();
-  const volume = SYNTHETIC_DEMO_VOLUMES[activeModality];
-  const slice = volume.slices[currentSlice];
+  const volume = REFERENCE_MRI_VOLUMES[activeModality];
   const activeDetails = MRI_MODALITIES.find((modality) => modality.id === activeModality)!;
 
   useEffect(() => {
@@ -22,16 +22,14 @@ export default function MriSliceNavigator() {
   useEffect(() => {
     let isCurrent = true;
     setImageStatus("loading");
-    neighboringSliceIndices(currentSlice, volume.totalSlices).forEach((sliceIndex) => {
+    neighboringSliceIndices(currentSlice, volume.totalSlices).forEach(() => {
       const preload = new Image();
-      preload.src = volume.slices[sliceIndex]!.url;
-      if (sliceIndex === currentSlice) {
-        preload.onload = () => { if (isCurrent) setImageStatus("ready"); };
-        preload.onerror = () => { if (isCurrent) setImageStatus("error"); };
-      }
+      preload.src = volume.spriteUrl;
+      preload.onload = () => { if (isCurrent) setImageStatus("ready"); };
+      preload.onerror = () => { if (isCurrent) setImageStatus("error"); };
     });
     return () => { isCurrent = false; };
-  }, [activeModality, currentSlice, retryKey, volume]);
+  }, [currentSlice, retryKey, volume.spriteUrl, volume.totalSlices]);
 
   const setSlice = (target: number) => setCurrentSlice(clampSliceIndex(target, volume.totalSlices));
   const onViewportKeyDown = (event: KeyboardEvent<HTMLElement>) => {
@@ -48,21 +46,19 @@ export default function MriSliceNavigator() {
     document.getElementById(`${baseId}-tab-${next}`)?.focus();
   };
 
-  return <section className="slice-navigator" aria-label="Synthetic MRI slice viewer">
+  return <section className="slice-navigator" aria-label="Reference MRI slice viewer">
     <div className="modality-tabs" role="tablist" aria-label="MRI modalities">
       {MRI_MODALITIES.map((modality, index) => <button key={modality.id} id={`${baseId}-tab-${index}`} type="button" role="tab" aria-selected={modality.id === activeModality} aria-controls={`${baseId}-panel`} tabIndex={modality.id === activeModality ? 0 : -1} onClick={() => setActiveModality(modality.id)} onKeyDown={(event) => onTabKeyDown(event, index)}>{modality.label}</button>)}
     </div>
-    <div id={`${baseId}-panel`} className={`slice-viewport modality-${activeModality}`} role="tabpanel" aria-labelledby={`${baseId}-tab-${MRI_MODALITIES.findIndex((modality) => modality.id === activeModality)}`} tabIndex={0} onKeyDown={onViewportKeyDown} aria-label={`${activeDetails.label} synthetic MRI volume, slice ${currentSlice + 1} of ${volume.totalSlices}. Use left and right arrows to move through slices.`}>
-      <img key={`${activeModality}-${currentSlice}-${retryKey}`} src={slice?.url} alt={`Synthetic MRI demo data: ${activeDetails.label}, slice ${currentSlice + 1} of ${volume.totalSlices}`} onLoad={() => setImageStatus("ready")} onError={() => setImageStatus("error")} />
+    <div id={`${baseId}-panel`} className={`slice-viewport modality-${activeModality}`} role="tabpanel" aria-labelledby={`${baseId}-tab-${MRI_MODALITIES.findIndex((modality) => modality.id === activeModality)}`} tabIndex={0} onKeyDown={onViewportKeyDown} aria-label={`${activeDetails.label} reference MRI volume, slice ${currentSlice + 1} of ${volume.totalSlices}. Use left and right arrows to move through slices.`}>
+      <MriReferenceSlice modality={activeModality} sliceIndex={currentSlice} className="slice-viewport-image" labelPrefix="Reference MRI preview" />
       <span className="slice-crosshair slice-crosshair-x" aria-hidden="true" /><span className="slice-crosshair slice-crosshair-y" aria-hidden="true" />
       <span className="slice-viewport-label">AXIAL · {activeDetails.label}</span><span className="slice-viewport-counter">SLICE {String(currentSlice + 1).padStart(3, "0")} / {String(volume.totalSlices).padStart(3, "0")}</span>
-      <span className="demo-data-badge">Synthetic demo data · not for diagnosis</span>
+      <span className="demo-data-badge">Reference MRI preview · not for diagnosis</span>
       {imageStatus === "loading" && <span className="slice-load-state"><LoaderCircle className="spin-icon" size={14} /> Loading slice {currentSlice + 1}…</span>}
-      {imageStatus === "error" && <div className="slice-load-error" role="status">Unable to load slice {currentSlice + 1}<button type="button" onClick={() => setRetryKey((key) => key + 1)}><RotateCcw size={13} /> Retry</button></div>}
+      {imageStatus === "error" && <div className="slice-load-error" role="status">Unable to load the reference preview<button type="button" onClick={() => setRetryKey((key) => key + 1)}><RotateCcw size={13} /> Retry</button></div>}
     </div>
-    <div className="slice-navigator-footer">
-      <p>{activeDetails.detail}</p><p>Sequence supplied for interaction testing only</p>
-    </div>
+    <div className="slice-navigator-footer"><p>{activeDetails.detail}</p><p>Derived from the supplied reference volume · raw NIfTI remains private</p></div>
     <div className="slice-controls">
       <button type="button" className="slice-step" onClick={() => setSlice(previousSliceIndex(currentSlice, volume.totalSlices))} disabled={currentSlice === 0}><ChevronLeft size={16} /> Previous</button>
       <label className="slice-slider-label">Slice {currentSlice + 1} / {volume.totalSlices}<input type="range" min="0" max={volume.totalSlices - 1} value={currentSlice} aria-label="MRI slice number" onChange={(event) => setSlice(Number(event.target.value))} /></label>

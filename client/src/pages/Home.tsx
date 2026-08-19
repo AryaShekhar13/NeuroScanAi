@@ -1,9 +1,11 @@
 /**
+/**
  * Dala design reminder: editorial asymmetry, giant regular-weight typography, a black-void canvas,
  * and the constellation as the sole hero image. Never introduce cards, shadows, or UI gradients.
  */
 import { ArrowDownRight, ArrowUpRight, Menu, X } from "lucide-react";
 import { useState } from "react";
+import AccessRequestForm from "@/components/AccessRequestForm";
 import ParticleConstellation from "@/components/ParticleConstellation";
 
 const logoUrl = "/manus-storage/dala-logo-mark_e0a5fb13.png";
@@ -15,6 +17,7 @@ const navigation = [
   { label: "Manifesto", href: "#manifesto" },
   { label: "How it works", href: "#how-it-works" },
   { label: "Notes", href: "#notes" },
+  { label: "Workspace", href: "/library" },
 ];
 
 export default function Home() {
@@ -84,7 +87,7 @@ export default function Home() {
           </div>
 
           <div className="hero-visual" role="img" aria-label="A constellation of colorful triangular particles forming a neural cloud">
-            <img src={heroUrl} alt="" className="hero-art" />
+            <img src={heroUrl} alt="" className="hero-art" fetchPriority="high" decoding="async" />
             <ParticleConstellation />
             <p className="visual-caption">a field of shared intelligence</p>
           </div>
@@ -116,7 +119,7 @@ export default function Home() {
 
         <section id="how-it-works" className="knowledge-section section-shell" aria-labelledby="knowledge-title">
           <div className="knowledge-art-wrap" aria-hidden="true">
-            <img src={knowledgeUrl} alt="" className="knowledge-art" />
+            <img src={knowledgeUrl} alt="" className="knowledge-art" loading="lazy" decoding="async" />
             <div className="art-note art-note-top">source signals</div>
             <div className="art-note art-note-bottom">context, not just content</div>
           </div>
@@ -150,7 +153,7 @@ export default function Home() {
             <h2 id="notes-title">The best work is a relay, not a reset.</h2>
           </div>
           <div className="notes-visual">
-            <img src={fieldUrl} alt="Colorful outlined triangular particles crossing a black field" />
+            <img src={fieldUrl} alt="Colorful outlined triangular particles crossing a black field" loading="lazy" decoding="async" />
             <p>
               Intelligence is not a single answer. It is the trace of decisions, questions, and
               people learning from one another.
@@ -167,9 +170,7 @@ export default function Home() {
                 Dala is being shaped with teams who want their accumulated knowledge to feel
                 alive, shared, and useful.
               </p>
-              <a className="primary-action" href="mailto:hello@dala.ai?subject=Request%20Dala%20access">
-                Start a conversation <ArrowUpRight size={16} strokeWidth={1.7} />
-              </a>
+              <AccessRequestForm />
               <p className="access-footnote">Early access is opening in small cohorts.</p>
             </div>
           </div>

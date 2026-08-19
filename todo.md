@@ -28,3 +28,11 @@
 - [x] Test signup, login failure, logout, protected-route redirects, database ownership rules, and file persistence.
 - [x] Browser-verify the password-reset redirect lands on the current protected `/app` dashboard route.
 - [x] Align the protected dashboard entry and post-authentication redirects with the specified `/app` route.
+- [x] Review the complete security and upload correction requirements.
+- [x] Add a configurable transactional-email abstraction for real password-reset delivery.
+- [x] Strengthen password-reset lifecycle, session invalidation, rate limiting, and authentication audit events.
+- [x] Add strict server-side NIfTI signature, size, gzip, checksum, and modality validation.
+- [x] Add MRI folder selection, detected-modality review, duplicate handling, and confirmation before submission.
+- [x] Expand study-file metadata, secure storage access, and privacy safeguards for confidential MRI data.
+- [x] Add environment-variable documentation and test hardened authentication and MRI upload flows.
+- [x] Document the required deployment configuration for SMTP, application URLs, and MRI upload limits.

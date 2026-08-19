@@ -1,9 +1,10 @@
-import { and, count, desc, eq, like, or } from "drizzle-orm";
+import { and, count, desc, eq, gt, isNull, like, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   accessRequests,
   analysisJobs,
   auditLogs,
+  authRateLimits,
   clinicianAccounts,
   InsertUser,
   patients,
@@ -71,19 +72,56 @@ export async function touchClinicianLogin(id: number) {
   await db.update(clinicianAccounts).set({ lastSignedIn: new Date() }).where(eq(clinicianAccounts.id, id));
 }
 
+export async function updateClinicianPasswordHash(id: number, passwordHash: string) {
+  const db = requireDb(await getDb());
+  await db.update(clinicianAccounts).set({ passwordHash }).where(eq(clinicianAccounts.id, id));
+}
+
 export async function setPasswordReset(email: string, tokenHash: string, expiresAt: Date) {
   const db = requireDb(await getDb());
-  await db.update(clinicianAccounts).set({ resetTokenHash: tokenHash, resetTokenExpiresAt: expiresAt }).where(eq(clinicianAccounts.email, email.toLowerCase()));
+  await db.update(clinicianAccounts).set({ resetTokenHash: tokenHash, resetTokenExpiresAt: expiresAt, resetTokenUsedAt: null }).where(eq(clinicianAccounts.email, email.toLowerCase()));
 }
 
 export async function consumePasswordReset(tokenHash: string, nextPasswordHash: string) {
   const db = requireDb(await getDb());
-  const accounts = await db.select().from(clinicianAccounts).where(eq(clinicianAccounts.resetTokenHash, tokenHash)).limit(1);
+  const accounts = await db.select().from(clinicianAccounts).where(and(eq(clinicianAccounts.resetTokenHash, tokenHash), isNull(clinicianAccounts.resetTokenUsedAt))).limit(1);
   const account = accounts[0];
   if (!account?.resetTokenExpiresAt || account.resetTokenExpiresAt.getTime() < Date.now()) return undefined;
-  await db.update(clinicianAccounts).set({ passwordHash: nextPasswordHash, resetTokenHash: null, resetTokenExpiresAt: null }).where(eq(clinicianAccounts.id, account.id));
-  await createAuditLog(account.id, "account.password_reset", "clinicianAccount", String(account.id));
+  await db.update(clinicianAccounts).set({ passwordHash: nextPasswordHash, resetTokenHash: null, resetTokenExpiresAt: null, resetTokenUsedAt: new Date(), sessionVersion: sql`${clinicianAccounts.sessionVersion} + 1` }).where(eq(clinicianAccounts.id, account.id));
+  await createAuditLog(account.id, "PASSWORD_RESET_COMPLETED", "clinicianAccount", String(account.id));
   return getClinicianById(account.id);
+}
+
+export async function invalidateClinicianSessions(id: number) {
+  const db = requireDb(await getDb());
+  await db.update(clinicianAccounts).set({ sessionVersion: sql`${clinicianAccounts.sessionVersion} + 1` }).where(eq(clinicianAccounts.id, id));
+}
+
+const RATE_WINDOW_MS = 15 * 60 * 1000;
+const MAX_ATTEMPTS = 5;
+
+export async function checkAuthRateLimit(scope: string, keyHash: string) {
+  const db = requireDb(await getDb());
+  const record = (await db.select().from(authRateLimits).where(and(eq(authRateLimits.scope, scope), eq(authRateLimits.keyHash, keyHash))).orderBy(desc(authRateLimits.updatedAt)).limit(1))[0];
+  if (!record) return;
+  if (record.lockedUntil && record.lockedUntil.getTime() > Date.now()) {
+    throw new Error("Too many attempts. Please wait before trying again.");
+  }
+}
+
+export async function registerAuthRateAttempt(scope: string, keyHash: string, success: boolean) {
+  const db = requireDb(await getDb());
+  const record = (await db.select().from(authRateLimits).where(and(eq(authRateLimits.scope, scope), eq(authRateLimits.keyHash, keyHash))).orderBy(desc(authRateLimits.updatedAt)).limit(1))[0];
+  if (success) {
+    if (record) await db.update(authRateLimits).set({ attempts: 0, lockedUntil: null, windowStartedAt: new Date() }).where(eq(authRateLimits.id, record.id));
+    return;
+  }
+  const windowExpired = !record || Date.now() - record.windowStartedAt.getTime() > RATE_WINDOW_MS;
+  const attempts = windowExpired ? 1 : record.attempts + 1;
+  const lockMinutes = attempts >= MAX_ATTEMPTS ? Math.min(60, 2 ** (attempts - MAX_ATTEMPTS)) : 0;
+  const values = { attempts, windowStartedAt: windowExpired ? new Date() : record.windowStartedAt, lockedUntil: lockMinutes ? new Date(Date.now() + lockMinutes * 60_000) : null };
+  if (record) await db.update(authRateLimits).set(values).where(eq(authRateLimits.id, record.id));
+  else await db.insert(authRateLimits).values({ scope, keyHash, ...values });
 }
 
 export async function createAuditLog(userId: number | null, action: string, resourceType: string, resourceId?: string, metadata?: Record<string, unknown>) {
@@ -109,7 +147,7 @@ export async function createPatient(ownerId: number, input: { patientReference: 
   const db = requireDb(await getDb());
   const result = await db.insert(patients).values({ createdBy: ownerId, ...input });
   const id = Number(result[0].insertId);
-  await createAuditLog(ownerId, "patient.created", "patient", String(id));
+  await createAuditLog(ownerId, "PATIENT_CREATED", "patient", String(id));
   return getPatientOwned(ownerId, id);
 }
 
@@ -127,14 +165,14 @@ export async function getStudyOwned(ownerId: number, studyId: number) {
   return { ...record, files, jobs };
 }
 
-export async function createStudy(ownerId: number, input: { patientId: number; studyDate: Date; description?: string; files: Array<{ modality: "t1" | "t1ce" | "t2" | "flair"; originalFilename: string; storagePath: string; fileSize: number; mimeType: string }> }) {
+export async function createStudy(ownerId: number, input: { patientId: number; studyDate: Date; description?: string; files: Array<{ modality: "t1" | "t1ce" | "t2" | "flair"; originalFilename: string; storagePath: string; fileSize: number; mimeType: string; checksum: string; relativePath: string | null; uncompressedSize: number; metadata: Record<string, unknown> }> }) {
   const db = requireDb(await getDb());
   const patient = await getPatientOwned(ownerId, input.patientId);
   if (!patient) throw new Error("Patient not found or not authorized.");
   const result = await db.insert(studies).values({ patientId: input.patientId, createdBy: ownerId, studyDate: input.studyDate, description: input.description || null, status: "queued" });
   const studyId = Number(result[0].insertId);
   if (input.files.length) await db.insert(studyFiles).values(input.files.map((file) => ({ ...file, studyId })));
-  await createAuditLog(ownerId, "study.created", "study", String(studyId), { fileCount: input.files.length });
+  await createAuditLog(ownerId, "STUDY_CREATED", "study", String(studyId), { fileCount: input.files.length });
   return getStudyOwned(ownerId, studyId);
 }
 
@@ -145,7 +183,7 @@ export async function createMockAnalysis(ownerId: number, studyId: number) {
   const result = await db.insert(analysisJobs).values({ studyId, createdBy: ownerId, modelName: "MockSegmentationService", modelVersion: "demo-1", status: "queued", isDemo: 1 });
   const id = Number(result[0].insertId);
   await db.update(studies).set({ status: "queued" }).where(eq(studies.id, studyId));
-  await createAuditLog(ownerId, "analysis.mock_submitted", "analysisJob", String(id), { studyId });
+  await createAuditLog(ownerId, "ANALYSIS_MOCK_SUBMITTED", "analysisJob", String(id), { studyId });
   return (await db.select().from(analysisJobs).where(eq(analysisJobs.id, id)).limit(1))[0];
 }
 

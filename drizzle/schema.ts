@@ -23,6 +23,8 @@ export const clinicianAccounts = mysqlTable("clinicianAccounts", {
   institution: varchar("institution", { length: 200 }).notNull(),
   resetTokenHash: varchar("resetTokenHash", { length: 128 }),
   resetTokenExpiresAt: timestamp("resetTokenExpiresAt"),
+  resetTokenUsedAt: timestamp("resetTokenUsedAt"),
+  sessionVersion: int("sessionVersion").default(1).notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -56,6 +58,10 @@ export const studyFiles = mysqlTable("studyFiles", {
   storagePath: varchar("storagePath", { length: 512 }).notNull().unique(),
   fileSize: int("fileSize").notNull(),
   mimeType: varchar("mimeType", { length: 150 }).notNull(),
+  checksum: varchar("checksum", { length: 64 }),
+  relativePath: varchar("relativePath", { length: 512 }),
+  uncompressedSize: int("uncompressedSize"),
+  metadata: json("metadata"),
   uploadStatus: mysqlEnum("uploadStatus", ["uploaded", "failed"]).default("uploaded").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => [index("studyFiles_study_idx").on(table.studyId)]);
@@ -91,6 +97,18 @@ export const auditLogs = mysqlTable("auditLogs", {
   metadata: json("metadata"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => [index("auditLogs_user_createdAt_idx").on(table.userId, table.createdAt)]);
+
+/** Hashed request-attempt counters prevent brute-force authentication without retaining raw identifiers. */
+export const authRateLimits = mysqlTable("authRateLimits", {
+  id: int("id").autoincrement().primaryKey(),
+  scope: varchar("scope", { length: 64 }).notNull(),
+  keyHash: varchar("keyHash", { length: 64 }).notNull(),
+  attempts: int("attempts").default(0).notNull(),
+  windowStartedAt: timestamp("windowStartedAt").defaultNow().notNull(),
+  lockedUntil: timestamp("lockedUntil"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => [index("authRateLimits_scope_key_idx").on(table.scope, table.keyHash)]);
 
 /** Public requests from the original landing experience. */
 export const accessRequests = mysqlTable("accessRequests", {

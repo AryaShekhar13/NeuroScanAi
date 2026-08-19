@@ -26,7 +26,10 @@ export async function createContext(
 
   try {
     const session = await readClinicianSession(opts.req.headers.cookie);
-    if (session) clinician = await getClinicianById(session.clinicianId) ?? null;
+    if (session) {
+      const account = await getClinicianById(session.clinicianId);
+      clinician = account?.sessionVersion === session.sessionVersion ? account : null;
+    }
   } catch (error) {
     clinician = null;
   }

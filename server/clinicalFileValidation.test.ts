@@ -1,14 +1,43 @@
+import { gzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { decodeClinicalUpload } from "./clinicalFileValidation";
+import { decodeClinicalUpload, detectMriModality, inspectClinicalUploads } from "./clinicalFileValidation";
 
-describe("clinical MRI upload validation", () => {
-  it("accepts a supported DICOM payload without persisting bytes in the database", () => {
-    const result = decodeClinicalUpload({ fileName: "study-001.dcm", mimeType: "application/dicom", base64: Buffer.from("MRI").toString("base64") });
-    expect(result.fileName).toBe("study-001.dcm");
-    expect(result.bytes.toString()).toBe("MRI");
+function niftiFixture() {
+  const bytes = Buffer.alloc(352);
+  bytes.writeInt32LE(348, 0);
+  bytes.writeInt16LE(3, 40); bytes.writeInt16LE(64, 42); bytes.writeInt16LE(64, 44); bytes.writeInt16LE(32, 46);
+  bytes.writeFloatLE(1, 80); bytes.writeFloatLE(1, 84); bytes.writeFloatLE(1.5, 88);
+  bytes.write("n+1\0", 344, "latin1");
+  return bytes;
+}
+function upload(name: string, bytes = niftiFixture()) { return { fileName: name, mimeType: "application/octet-stream", base64: bytes.toString("base64") }; }
+
+describe("hardened clinical NIfTI validation", () => {
+  it("validates an actual NIfTI header, calculates a checksum, and detects a tokenized modality", () => {
+    const result = decodeClinicalUpload(upload("BraTS_001_t1.nii"));
+    expect(result.modality).toBe("t1"); expect(result.checksum).toHaveLength(64); expect(result.metadata.dimensions).toEqual([64, 64, 32]);
   });
-
-  it("rejects non-MRI file extensions", () => {
-    expect(() => decodeClinicalUpload({ fileName: "report.pdf", mimeType: "application/pdf", base64: Buffer.from("not-mri").toString("base64") })).toThrow("DICOM");
+  it("accepts a bounded gzip-compressed NIfTI payload", () => {
+    const bytes = gzipSync(niftiFixture()); const result = decodeClinicalUpload(upload("BRATS-001-T1ce.nii.gz", bytes));
+    expect(result.modality).toBe("t1ce"); expect(result.uncompressedSize).toBe(352);
+  });
+  it("rejects a renamed executable, malformed header, and unrecognized modality", () => {
+    expect(() => decodeClinicalUpload(upload("brain_t2.nii.gz", Buffer.from("not a gzip")))).toThrow("File validation failed");
+    expect(() => decodeClinicalUpload(upload("brain_unknown.nii"))).toThrow("modality");
+    expect(() => decodeClinicalUpload({ fileName: "malware.exe", mimeType: "application/octet-stream", base64: Buffer.from("MZ").toString("base64") })).toThrow("Unsupported file");
+    expect(() => decodeClinicalUpload({ ...upload("scan_t1.nii"), mimeType: "application/x-msdownload" })).toThrow("File validation failed");
+  });
+  it("recognizes guarded naming aliases without naïve arbitrary substring matching", () => {
+    expect(detectMriModality("scan_t2_flair.nii.gz")).toBe("flair"); expect(detectMriModality("patient_t1_gd.nii")).toBe("t1ce"); expect(detectMriModality("att1ck.nii")).toBeNull();
+  });
+  it("reports duplicate and missing modalities before a study is saved", () => {
+    const result = inspectClinicalUploads([upload("a_t1.nii"), upload("b_t1.nii"), upload("a_t2.nii")]);
+    expect(result.duplicates).toEqual(["t1"]); expect(result.missing).toEqual(["t1ce", "flair"]); expect(result.complete).toBe(false);
+  });
+  it("preserves nested folder context and rejects decompression payloads beyond the configured limit", () => {
+    const nested = decodeClinicalUpload({ ...upload("BraTS_001_t2.nii"), relativePath: "study/session-01/BraTS_001_t2.nii" });
+    expect(nested.relativePath).toBe("study/session-01/BraTS_001_t2.nii");
+    const oversized = Buffer.alloc(8 * 1024 * 1024 + 1); oversized.writeInt32LE(348, 0); oversized.write("n+1\0", 344, "latin1");
+    expect(() => decodeClinicalUpload(upload("large_flair.nii.gz", gzipSync(oversized)))).toThrow("File validation failed");
   });
 });

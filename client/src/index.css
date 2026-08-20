@@ -897,6 +897,40 @@ a:focus-visible {
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  .page-motion.is-page-motion-ready {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+    transition: opacity 360ms var(--ease-out), transform 360ms var(--ease-out);
+    will-change: opacity, transform;
+  }
+
+  .page-motion.is-page-motion-ready.is-page-motion-visible {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    will-change: auto;
+  }
+
+  .page-motion.is-page-motion-ready :where(
+    .clinical-main > *,
+    .app-main > *,
+    .dashboard-main > *,
+    .demo-page > *,
+    .auth-main > *,
+    .workspace-main > *,
+    .not-found-page > *
+  ) {
+    opacity: 0;
+    transform: translate3d(0, 22px, 0);
+    transition: opacity 560ms var(--ease-out) var(--page-reveal-delay, 0ms), transform 560ms var(--ease-out) var(--page-reveal-delay, 0ms);
+    will-change: opacity, transform;
+  }
+
+  .page-motion.is-page-motion-ready .is-page-content-revealed {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    will-change: auto;
+  }
+
   .scroll-reveal.is-reveal-ready [data-scroll-reveal] {
     opacity: 0;
     transform: translate3d(0, 24px, 0);
@@ -1142,6 +1176,12 @@ a:focus-visible {
 
   .reveal-up {
     animation: none;
+  }
+
+  .page-motion,
+  .page-motion * {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
   }
 
   .scroll-reveal [data-scroll-reveal] {

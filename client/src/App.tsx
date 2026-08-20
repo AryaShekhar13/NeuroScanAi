@@ -14,6 +14,7 @@ import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
 import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import DemoPage from "@/pages/DemoPage";
 import { ClinicianRouteGuard } from "@/hooks/useClinicianAuth";
+import { PageMotion } from "@/components/PageMotion";
 import Home from "@/pages/Home";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -42,5 +43,5 @@ function Router() {
 }
 
 export default function App() {
-  return <ErrorBoundary><ThemeProvider defaultTheme="dark"><TooltipProvider><Toaster /><Router /></TooltipProvider></ThemeProvider></ErrorBoundary>;
+  return <ErrorBoundary><ThemeProvider defaultTheme="dark"><TooltipProvider><Toaster /><PageMotion><Router /></PageMotion></TooltipProvider></ThemeProvider></ErrorBoundary>;
 }

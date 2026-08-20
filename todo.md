@@ -54,3 +54,12 @@
 - [x] Reapply and read back the public-demo rejection and responsive-verification record before the release checkpoint.
 - [x] Add smooth, staggered scroll-reveal transitions to landing-page content using opacity and transform only.
 - [x] Respect reduced-motion preferences and verify the landing page remains responsive while content fades into view.
+- [x] Audit all current public and protected page shells, routes, and motion styles for centralized integration points.
+- [x] Create a shared, reduced-motion-aware route transition and scroll-position handler without hijacking native scrolling.
+- [x] Extend the reusable scroll-reveal system to every page route without changing existing layout, content, or workflow behavior.
+- [x] Verify homepage, authentication, demo, and clinician routes across desktop, tablet, mobile, route navigation, and reduced-motion settings.
+- [x] Ensure the shared motion observer reveals dynamic content that renders after asynchronous route data loads.
+- [x] Correct shared reveal-state CSS precedence so observed route content reaches full opacity after its transition.
+- [x] Expand shared content-reveal coverage to all route-level page shells without altering layouts or workflows.
+- [x] Verify the updated motion system on an authenticated clinician route across desktop, tablet, mobile, history navigation, and reduced-motion settings.
+- [x] Verify native back-and-forward navigation between authenticated clinician routes with the shared motion system settled.

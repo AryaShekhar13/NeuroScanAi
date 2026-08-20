@@ -5,6 +5,7 @@ import MriModalityTabs from "@/components/MriModalityTabs";
 import { MriReferenceSlice } from "@/components/MriReferenceSlice";
 import { NeuroLogo } from "@/components/NeuroLogo";
 import ParticleConstellation from "@/components/ParticleConstellation";
+import { useScrollReveal } from "@/hooks/useScrollReveal";
 
 const navigation = [
   { label: "Product", href: "#product" },
@@ -14,6 +15,7 @@ const navigation = [
 
 export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const revealRootRef = useScrollReveal<HTMLElement>();
   const closeMenu = () => setMenuOpen(false);
 
   return (
@@ -35,7 +37,7 @@ export default function Home() {
         </nav>}
       </header>
 
-      <main id="top">
+      <main id="top" ref={revealRootRef} className="scroll-reveal">
         <section className="neuro-hero" aria-labelledby="hero-title">
           <div className="neuro-hero-copy reveal-up">
             <h1 id="hero-title">Understand <span>what lies</span><span>beneath the scan.</span></h1>
@@ -53,44 +55,44 @@ export default function Home() {
           <div className="neuro-scroll-cue" aria-hidden="true">Enter the field <ArrowDownRight size={16} strokeWidth={1.3} /></div>
         </section>
 
-        <section className="neuro-problem neuro-section" aria-labelledby="problem-title">
+        <section className="neuro-problem neuro-section" aria-labelledby="problem-title" data-scroll-reveal>
           <p className="amber-label">THE PROBLEM</p>
           <h2 id="problem-title">MRI studies contain enormous amounts of information.</h2>
           <p>Finding the relevant patterns shouldn’t mean fighting through complexity.</p>
         </section>
 
-        <section className="neuro-idea neuro-section" aria-labelledby="idea-title">
+        <section className="neuro-idea neuro-section" aria-labelledby="idea-title" data-scroll-reveal>
           <div><p className="amber-label">THE IDEA</p><h2 id="idea-title">From scan<br />to insight.</h2></div>
           <p>NeuroScan AI brings MRI studies, segmentation, and review into one focused clinical workspace.</p>
         </section>
 
         <section className="neuro-data neuro-section" aria-labelledby="data-title">
-          <div className="data-copy"><p className="amber-label">MULTI-MODAL MRI</p><h2 id="data-title">One brain.<br />Four perspectives.</h2><p>NeuroScan AI brings complementary MRI modalities together for AI-assisted analysis and clinical review.</p></div>
-          <div className="mri-reference-grid" aria-label="Reference MRI previews from one multi-modal study">{(["t1", "t1ce", "t2", "flair"] as const).map((modality) => <figure key={modality}><MriReferenceSlice modality={modality} sliceIndex={77} labelPrefix="Demo MRI" /><figcaption>{modality.toUpperCase()}</figcaption></figure>)}</div>
-          <a href="/demo" className="neuro-text-link mri-workspace-link">Explore the MRI workspace <ArrowRight size={16} strokeWidth={1.5} /></a>
+          <div className="data-copy" data-scroll-reveal><p className="amber-label">MULTI-MODAL MRI</p><h2 id="data-title">One brain.<br />Four perspectives.</h2><p>NeuroScan AI brings complementary MRI modalities together for AI-assisted analysis and clinical review.</p></div>
+          <div className="mri-reference-grid" aria-label="Reference MRI previews from one multi-modal study" data-scroll-reveal data-reveal-delay="100">{(["t1", "t1ce", "t2", "flair"] as const).map((modality) => <figure key={modality}><MriReferenceSlice modality={modality} sliceIndex={77} labelPrefix="Demo MRI" /><figcaption>{modality.toUpperCase()}</figcaption></figure>)}</div>
+          <a href="/demo" className="neuro-text-link mri-workspace-link" data-scroll-reveal data-reveal-delay="160">Explore the MRI workspace <ArrowRight size={16} strokeWidth={1.5} /></a>
         </section>
 
         <section className="neuro-segmentation neuro-section" aria-labelledby="segmentation-title">
-          <div className="segmentation-brain" aria-hidden="true"><ParticleConstellation /></div>
-          <div className="segmentation-copy"><p className="amber-label">AI-ASSISTED SEGMENTATION</p><h2 id="segmentation-title">Find the pattern.</h2><p>AI-generated segmentation helps clinicians inspect regions of interest within the MRI study. It supports review; it does not replace clinical judgment.</p></div>
+          <div className="segmentation-brain" aria-hidden="true" data-scroll-reveal><ParticleConstellation /></div>
+          <div className="segmentation-copy" data-scroll-reveal data-reveal-delay="100"><p className="amber-label">AI-ASSISTED SEGMENTATION</p><h2 id="segmentation-title">Find the pattern.</h2><p>AI-generated segmentation helps clinicians inspect regions of interest within the MRI study. It supports review; it does not replace clinical judgment.</p></div>
         </section>
 
         <section className="neuro-review neuro-section" id="clinicians" aria-labelledby="review-title">
-          <div><p className="amber-label">CLINICAL REVIEW</p><h2 id="review-title">The clinician stays<br />in control.</h2><p>Review the original MRI, inspect segmentation overlays, move through slices, and make the final clinical judgment.</p></div>
-          <div className="review-orbit" aria-label="Clinical review controls illustration"><span>T1</span><span>T1CE</span><span>T2</span><span>FLAIR</span><span>SEGMENTATION</span><span>OPACITY</span><i /></div>
+          <div data-scroll-reveal><p className="amber-label">CLINICAL REVIEW</p><h2 id="review-title">The clinician stays<br />in control.</h2><p>Review the original MRI, inspect segmentation overlays, move through slices, and make the final clinical judgment.</p></div>
+          <div className="review-orbit" aria-label="Clinical review controls illustration" data-scroll-reveal data-reveal-delay="100"><span>T1</span><span>T1CE</span><span>T2</span><span>FLAIR</span><span>SEGMENTATION</span><span>OPACITY</span><i /></div>
         </section>
 
         <section className="neuro-product neuro-section" id="product" aria-labelledby="product-title">
-          <div className="product-heading"><p className="amber-label">THE WORKSPACE</p><h2 id="product-title">One quiet place to look deeper.</h2><a href="/login" className="neuro-text-link">Open clinical workspace <ArrowUpRight size={16} strokeWidth={1.5} /></a></div>
-          <div className="product-mockup"><MriModalityTabs /><div className="mockup-rail"><span>SEGMENTATION</span><span>OPACITY 62%</span><span>SLICE 082</span><span>ZOOM · PAN</span></div></div>
+          <div className="product-heading" data-scroll-reveal><p className="amber-label">THE WORKSPACE</p><h2 id="product-title">One quiet place to look deeper.</h2><a href="/login" className="neuro-text-link">Open clinical workspace <ArrowUpRight size={16} strokeWidth={1.5} /></a></div>
+          <div className="product-mockup" data-scroll-reveal data-reveal-delay="100"><MriModalityTabs /><div className="mockup-rail"><span>SEGMENTATION</span><span>OPACITY 62%</span><span>SLICE 082</span><span>ZOOM · PAN</span></div></div>
         </section>
 
-        <section className="neuro-workflow neuro-section" id="workflow" aria-labelledby="workflow-title">
+        <section className="neuro-workflow neuro-section" id="workflow" aria-labelledby="workflow-title" data-scroll-reveal>
           <p className="amber-label">SIMPLE WORKFLOW</p><h2 id="workflow-title">From image to clinical review.</h2>
           <ol>{[["01", "Upload MRI"], ["02", "AI analysis"], ["03", "Segmentation"], ["04", "Clinical review"]].map(([number, label]) => <li key={number}><span>{number}</span><p>{label}</p></li>)}</ol>
         </section>
 
-        <section className="neuro-final-cta neuro-section" aria-labelledby="final-title">
+        <section className="neuro-final-cta neuro-section" aria-labelledby="final-title" data-scroll-reveal>
           <p className="amber-label">NEUROSCAN AI</p><h2 id="final-title">Ready to see<br />what the scan reveals?</h2><p>Create your clinical workspace and explore AI-assisted MRI analysis.</p><div><a href="/signup" className="primary-action">Create account <ArrowRight size={16} strokeWidth={1.6} /></a><a href="/login" className="neuro-text-link">Sign in</a></div>
         </section>
       </main>

@@ -896,6 +896,21 @@ a:focus-visible {
   animation: fade-up 720ms var(--ease-out) both;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  .scroll-reveal.is-reveal-ready [data-scroll-reveal] {
+    opacity: 0;
+    transform: translate3d(0, 24px, 0);
+    transition: opacity 620ms var(--ease-out) var(--reveal-delay, 0ms), transform 620ms var(--ease-out) var(--reveal-delay, 0ms);
+    will-change: opacity, transform;
+  }
+
+  .scroll-reveal.is-reveal-ready [data-scroll-reveal].is-revealed {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    will-change: auto;
+  }
+}
+
 @keyframes fade-up {
   from {
     opacity: 0;
@@ -1127,6 +1142,12 @@ a:focus-visible {
 
   .reveal-up {
     animation: none;
+  }
+
+  .scroll-reveal [data-scroll-reveal] {
+    opacity: 1;
+    transform: none;
+    transition: none;
   }
 
   *,

@@ -52,3 +52,5 @@
 - [x] Make the mobile viewport verification helper tolerate reload timing when restoring the desktop study viewer.
 - [x] Confirm the verification record documents the browser rejection result and the public-demo and protected-viewer responsive checks.
 - [x] Reapply and read back the public-demo rejection and responsive-verification record before the release checkpoint.
+- [x] Add smooth, staggered scroll-reveal transitions to landing-page content using opacity and transform only.
+- [x] Respect reduced-motion preferences and verify the landing page remains responsive while content fades into view.

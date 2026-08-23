@@ -31,6 +31,7 @@ function safeMessage(error: unknown) {
   return error instanceof Error ? error.message : "The AI inference service could not complete this request. Please try again.";
 }
 function readAsBase64(file: File) { return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onerror = () => reject(new Error("The selected MRI file could not be read.")); reader.onload = () => resolve(String(reader.result).split(",", 2)[1] || ""); reader.readAsDataURL(file); }); }
+function withTimeout<T>(promise: Promise<T>, milliseconds: number, message: string) { return new Promise<T>((resolve, reject) => { const timeout = window.setTimeout(() => reject(new Error(message)), milliseconds); promise.then((value) => { window.clearTimeout(timeout); resolve(value); }, (error) => { window.clearTimeout(timeout); reject(error); }); }); }
 
 export default function DemoPage() {
   const fileInput = useRef<HTMLInputElement>(null);
@@ -112,7 +113,7 @@ export default function DemoPage() {
     setInferenceError(null); setPhase("Uploading MRI...");
     try {
       const validationFiles = await Promise.all(modalities.map(async ({ value }) => ({ modality: value, fileName: selectedFiles[value].name, mimeType: selectedFiles[value].type || "application/gzip", base64: await readAsBase64(selectedFiles[value]) })));
-      const validation = await validateDemo.mutateAsync({ files: validationFiles });
+      const validation = await withTimeout(validateDemo.mutateAsync({ files: validationFiles }), 120_000, "Secure MRI validation is taking longer than expected. Please try again.");
       const t1 = validation.detected.find((file) => file.modality === "t1");
       const axialSlices = t1?.metadata.dimensions[2] ?? await getNiftiAxialSliceCount(selectedFiles.t1);
       if (!Number.isInteger(axialSlices) || axialSlices < 1) throw new Error("The selected MRI file does not include valid axial slice metadata.");

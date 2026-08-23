@@ -55,6 +55,11 @@ const passwordRule = z.string().min(10, "Password must be at least 10 characters
 const clinicianInput = z.object({ email: z.string().trim().email().max(320), password: passwordRule });
 const clinicianProfileInput = clinicianInput.extend({ fullName: z.string().trim().min(2).max(160), professionalRole: z.string().trim().min(2).max(160), institution: z.string().trim().min(2).max(200) });
 const clinicalFileInput = z.object({ modality: z.enum(["t1", "t1ce", "t2", "flair"]), fileName: z.string().trim().min(1).max(255), mimeType: z.string().trim().max(150).default("application/octet-stream"), base64: z.string().min(4).max(11_200_000), relativePath: z.string().max(512).optional() });
+const demoInferenceFileInput = z.object({ modality: z.enum(["t1", "t1ce", "t2", "flair"]), fileName: z.string().trim().min(1).max(255) });
+const demoInferenceCompletionInput = z.object({ jobId: z.string().trim().min(1).max(160), files: z.array(demoInferenceFileInput).length(4).superRefine((files, issue) => {
+  const expected = ["t1", "t1ce", "t2", "flair"];
+  if (new Set(files.map((file) => file.modality)).size !== expected.length || !expected.every((modality) => files.some((file) => file.modality === modality))) issue.addIssue({ code: "custom", message: "A complete MRI study requires T1, T1CE, T2, and FLAIR files." });
+}) });
 
 function clinicianView(clinician: { id: number; email: string; fullName: string; professionalRole: string; institution: string }) { return { id: clinician.id, email: clinician.email, fullName: clinician.fullName, professionalRole: clinician.professionalRole, institution: clinician.institution }; }
 function requireFound<T>(value: T | undefined, resource = "Record"): T { if (!value) throw new TRPCError({ code: "NOT_FOUND", message: `${resource} not found or not authorized.` }); return value; }
@@ -124,6 +129,17 @@ export const appRouter = router({
       const visitor = await getOrCreateDemoVisitor(hashDemoVisitorToken(token), demoIpHash(ctx.req.ip), demoVisitorBindingHash(ctx.req.ip, ctx.req.headers["user-agent"]));
       return { used: Boolean(visitor.usedAt) };
     }),
+    validate: publicProcedure.input(z.object({ files: z.array(clinicalFileInput).min(1).max(4).superRefine((files, issue) => { if (new Set(files.map((file) => file.modality)).size !== files.length) issue.addIssue({ code: "custom", message: "Each MRI modality can only be uploaded once." }); }) })).mutation(async ({ ctx, input }) => {
+      const token = readDemoVisitorToken(ctx.req.headers.cookie) ?? createDemoVisitorToken();
+      if (!readDemoVisitorToken(ctx.req.headers.cookie)) setDemoVisitorCookie(ctx.res, token);
+      const tokenHash = hashDemoVisitorToken(token); const bindingHash = demoVisitorBindingHash(ctx.req.ip, ctx.req.headers["user-agent"]);
+      const visitor = await getOrCreateDemoVisitor(tokenHash, demoIpHash(ctx.req.ip), bindingHash);
+      if (visitor.usedAt) throw new TRPCError({ code: "FORBIDDEN", message: "Your free analysis has been used. Create an account to continue using NeuroScan AI." });
+      let inspection;
+      try { inspection = inspectClinicalUploads(input.files); } catch { throw new TRPCError({ code: "BAD_REQUEST", message: "File validation failed. The selected file could not be verified as a supported compressed MRI file." }); }
+      if (!inspection.complete) throw new TRPCError({ code: "BAD_REQUEST", message: "This MRI study is incomplete. Add missing modalities and resolve duplicate selections before running the demo." });
+      return { ready: true, detected: inspection.files.map((file) => ({ modality: file.modality, fileName: file.fileName, metadata: file.metadata })) };
+    }),
     run: publicProcedure.input(z.object({ files: z.array(clinicalFileInput).min(1).max(4).superRefine((files, issue) => { if (new Set(files.map((file) => file.modality)).size !== files.length) issue.addIssue({ code: "custom", message: "Each MRI modality can only be uploaded once." }); }) })).mutation(async ({ ctx, input }) => {
       const token = readDemoVisitorToken(ctx.req.headers.cookie) ?? createDemoVisitorToken();
       if (!readDemoVisitorToken(ctx.req.headers.cookie)) setDemoVisitorCookie(ctx.res, token);
@@ -138,6 +154,16 @@ export const appRouter = router({
       if (!await consumeDemoVisitor(tokenHash, bindingHash)) throw new TRPCError({ code: "FORBIDDEN", message: "Your free analysis has been used. Create an account to continue using NeuroScan AI." });
       await createAuditLog(null, "DEMO_ANALYSIS_COMPLETED", "demoVisitor", String(visitor.id), { modalityCount: inspection.files.length, totalBytes: inspection.totalBytes });
       return { used: true, notice: "Demo analysis complete. This demonstration does not provide a clinical diagnosis or inference result.", detected: inspection.files.map((file) => ({ modality: file.modality, fileName: file.fileName, metadata: file.metadata })) };
+    }),
+    completeReal: publicProcedure.input(demoInferenceCompletionInput).mutation(async ({ ctx, input }) => {
+      const token = readDemoVisitorToken(ctx.req.headers.cookie) ?? createDemoVisitorToken();
+      if (!readDemoVisitorToken(ctx.req.headers.cookie)) setDemoVisitorCookie(ctx.res, token);
+      const tokenHash = hashDemoVisitorToken(token);
+      const bindingHash = demoVisitorBindingHash(ctx.req.ip, ctx.req.headers["user-agent"]);
+      const visitor = await getOrCreateDemoVisitor(tokenHash, demoIpHash(ctx.req.ip), bindingHash);
+      if (!await consumeDemoVisitor(tokenHash, bindingHash)) throw new TRPCError({ code: "FORBIDDEN", message: "Your free analysis has been used. Create an account to continue using NeuroScan AI." });
+      await createAuditLog(null, "DEMO_REAL_INFERENCE_COMPLETED", "demoVisitor", String(visitor.id), { modalityCount: input.files.length });
+      return { used: true, notice: "Segmentation completed. Create an account to continue using NeuroScan AI.", detected: input.files };
     }),
   }),
   dashboard: router({ summary: clinicianProcedure.query(async ({ ctx }) => ({ metrics: await getDashboardMetrics(ctx.clinician.id), recentStudies: (await listStudies(ctx.clinician.id)).slice(0, 5) })) }),

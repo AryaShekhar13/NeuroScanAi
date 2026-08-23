@@ -63,3 +63,13 @@
 - [x] Expand shared content-reveal coverage to all route-level page shells without altering layouts or workflows.
 - [x] Verify the updated motion system on an authenticated clinician route across desktop, tablet, mobile, history navigation, and reduced-motion settings.
 - [x] Verify native back-and-forward navigation between authenticated clinician routes with the shared motion system settled.
+- [ ] Diagnose why valid clinician credentials do not consistently redirect the login page to the protected doctor dashboard.
+- [ ] Correct the credential-login redirect and verify dashboard access with the QA clinician account.
+- [x] Audit the existing MRI upload, mock analysis, results, and progress components for the smallest real-API integration point.
+- [x] Configure the supplied public inference API base URL without exposing internal server paths or model details.
+- [x] Send selected T1CE, T1, T2, and FLAIR `.nii.gz` files as exact multipart fields to real inference, then poll the returned job safely.
+- [x] Render the real visualization PNG in the current results experience with debounced axial-slice requests and clear progress/error states.
+- [ ] Verify the complete real inference flow and failure handling without changing the established application design.
+- [ ] Reconfirm direct live-browser CORS access and complete the real four-volume inference-to-visualization workflow without mock output.
+- [x] Add abortable, cleanup-aware polling and visualization requests so navigating away or changing slices cannot show stale results.
+- [x] Parse safe, non-sensitive API error messages while retaining clinical-safe fallback errors.

@@ -56,7 +56,7 @@ const clinicianInput = z.object({ email: z.string().trim().email().max(320), pas
 const clinicianProfileInput = clinicianInput.extend({ fullName: z.string().trim().min(2).max(160), professionalRole: z.string().trim().min(2).max(160), institution: z.string().trim().min(2).max(200) });
 const clinicalFileInput = z.object({ modality: z.enum(["t1", "t1ce", "t2", "flair"]), fileName: z.string().trim().min(1).max(255), mimeType: z.string().trim().max(150).default("application/octet-stream"), base64: z.string().min(4).max(11_200_000), relativePath: z.string().max(512).optional() });
 const demoInferenceFileInput = z.object({ modality: z.enum(["t1", "t1ce", "t2", "flair"]), fileName: z.string().trim().min(1).max(255) });
-const demoInferenceCompletionInput = z.object({ jobId: z.string().trim().min(1).max(160), files: z.array(demoInferenceFileInput).length(4).superRefine((files, issue) => {
+const demoInferenceCompletionInput = z.object({ files: z.array(demoInferenceFileInput).length(4).superRefine((files, issue) => {
   const expected = ["t1", "t1ce", "t2", "flair"];
   if (new Set(files.map((file) => file.modality)).size !== expected.length || !expected.every((modality) => files.some((file) => file.modality === modality))) issue.addIssue({ code: "custom", message: "A complete MRI study requires T1, T1CE, T2, and FLAIR files." });
 }) });

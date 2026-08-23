@@ -1,7 +1,7 @@
-import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Check, FileWarning, FolderUp, LoaderCircle, Upload } from "lucide-react";
 import { trpc } from "@/lib/trpc";
-import { getInferenceVisualization, getNiftiAxialSliceCount, submitInference, waitForInferenceStatus, type InferenceModality, type InferenceStatus } from "@/lib/inferenceApi";
+import { submitInference, type InferenceModality, type PredictResult } from "@/lib/inferenceApi";
 
 const modalities = [
   { value: "t1", label: "T1" }, { value: "t1ce", label: "T1CE" },
@@ -9,7 +9,7 @@ const modalities = [
 ] as const;
 type Modality = (typeof modalities)[number]["value"];
 type Candidate = { file: File; modality: Modality; relativePath?: string };
-type InferencePhase = "idle" | "Uploading MRI..." | "AI segmentation queued..." | "AI segmentation running..." | "Generating visualization..." | "Segmentation completed";
+type InferencePhase = "idle" | "Uploading MRI..." | "AI segmentation running..." | "Segmentation completed";
 const maxClientFileBytes = 8 * 1024 * 1024;
 
 const tokens = (name: string) => name.toLowerCase().replace(/\.nii\.gz$/, "").split(/[^a-z0-9]+/).filter(Boolean);
@@ -21,11 +21,6 @@ function modalityFor(name: string): Modality | null {
   if (has("t2") || has("t2w")) return "t2";
   return null;
 }
-function phaseFor(status: InferenceStatus): InferencePhase {
-  if (status.status === "queued") return "AI segmentation queued...";
-  if (status.status === "running") return "AI segmentation running...";
-  return "Generating visualization...";
-}
 function safeMessage(error: unknown) {
   if (error instanceof TypeError || (error instanceof Error && /failed to fetch|networkerror/i.test(error.message))) return "The AI inference service could not be reached. Check your connection and try again.";
   return error instanceof Error ? error.message : "The AI inference service could not complete this request. Please try again.";
@@ -36,31 +31,20 @@ function withTimeout<T>(promise: Promise<T>, milliseconds: number, message: stri
 export default function DemoPage() {
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
-  const visualizationUrlRef = useRef<string | null>(null);
-  const lastVisualizationSlice = useRef<number | null>(null);
   const operationAbortRef = useRef<AbortController | null>(null);
-  const visualizationAbortRef = useRef<AbortController | null>(null);
-  const sliceTimerRef = useRef<number | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [ignored, setIgnored] = useState<string[]>([]);
   const [selected, setSelected] = useState<Partial<Record<Modality, number>>>({});
   const [phase, setPhase] = useState<InferencePhase>("idle");
   const [inferenceError, setInferenceError] = useState<string | null>(null);
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [visualizationUrl, setVisualizationUrl] = useState<string | null>(null);
-  const [sliceCount, setSliceCount] = useState<number | null>(null);
-  const [slice, setSlice] = useState(0);
+  const [prediction, setPrediction] = useState<PredictResult | null>(null);
   const [completed, setCompleted] = useState<{ notice: string; detected: Array<{ modality: Modality; fileName: string }> } | null>(null);
   const status = trpc.demo.status.useQuery();
   const utils = trpc.useUtils();
   const validateDemo = trpc.demo.validate.useMutation();
   const completeReal = trpc.demo.completeReal.useMutation();
 
-  useEffect(() => {
-    folderInput.current?.setAttribute("webkitdirectory", "");
-    folderInput.current?.setAttribute("directory", "");
-    return () => { operationAbortRef.current?.abort(); visualizationAbortRef.current?.abort(); if (sliceTimerRef.current) window.clearTimeout(sliceTimerRef.current); if (visualizationUrlRef.current) URL.revokeObjectURL(visualizationUrlRef.current); };
-  }, []);
+  useEffect(() => { folderInput.current?.setAttribute("webkitdirectory", ""); folderInput.current?.setAttribute("directory", ""); return () => operationAbortRef.current?.abort(); }, []);
 
   const grouped = useMemo(() => modalities.reduce((result, modality) => ({ ...result, [modality.value]: candidates.filter((candidate) => candidate.modality === modality.value) }), {} as Record<Modality, Candidate[]>), [candidates]);
   const missing = modalities.filter(({ value }) => !grouped[value].length).map(({ label }) => label);
@@ -73,27 +57,6 @@ export default function DemoPage() {
   }, [complete, grouped, selected]);
   const busy = phase !== "idle" && phase !== "Segmentation completed";
 
-  const replaceVisualization = useCallback(async (id: string, requestedSlice: number) => {
-    visualizationAbortRef.current?.abort();
-    const controller = new AbortController(); visualizationAbortRef.current = controller;
-    const nextUrl = await getInferenceVisualization(id, requestedSlice, controller.signal);
-    if (controller.signal.aborted) { URL.revokeObjectURL(nextUrl); return; }
-    if (visualizationUrlRef.current) URL.revokeObjectURL(visualizationUrlRef.current);
-    visualizationUrlRef.current = nextUrl;
-    lastVisualizationSlice.current = requestedSlice;
-    setVisualizationUrl(nextUrl);
-  }, []);
-
-  const selectSlice = (nextSlice: number) => {
-    setSlice(nextSlice);
-    if (!completed || !jobId || lastVisualizationSlice.current === nextSlice) return;
-    if (sliceTimerRef.current) window.clearTimeout(sliceTimerRef.current);
-    sliceTimerRef.current = window.setTimeout(() => {
-      setInferenceError(null); setPhase("Generating visualization...");
-      void replaceVisualization(jobId, nextSlice).then(() => setPhase("Segmentation completed")).catch((error) => { if (error instanceof DOMException && error.name === "AbortError") return; setInferenceError(safeMessage(error)); setPhase("Segmentation completed"); });
-    }, 300);
-  };
-
   const collect = (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files; if (!files) return;
     const accepted: Candidate[] = []; const skipped: string[] = [];
@@ -103,7 +66,7 @@ export default function DemoPage() {
     });
     setCandidates(accepted); setIgnored(skipped);
     setSelected(Object.fromEntries(modalities.filter(({ value }) => accepted.some((candidate) => candidate.modality === value)).map(({ value }) => [value, 0])) as Partial<Record<Modality, number>>);
-    setInferenceError(null); setCompleted(null); setVisualizationUrl(null); setJobId(null); setSliceCount(null); setSlice(0); lastVisualizationSlice.current = null; setPhase("idle");
+    setInferenceError(null); setCompleted(null); setPrediction(null); setPhase("idle");
   };
 
   const submit = async (event: FormEvent) => {
@@ -113,20 +76,11 @@ export default function DemoPage() {
     setInferenceError(null); setPhase("Uploading MRI...");
     try {
       const validationFiles = await Promise.all(modalities.map(async ({ value }) => ({ modality: value, fileName: selectedFiles[value].name, mimeType: selectedFiles[value].type || "application/gzip", base64: await readAsBase64(selectedFiles[value]) })));
-      const validation = await withTimeout(validateDemo.mutateAsync({ files: validationFiles }), 120_000, "Secure MRI validation is taking longer than expected. Please try again.");
-      const t1 = validation.detected.find((file) => file.modality === "t1");
-      const axialSlices = t1?.metadata.dimensions[2] ?? await getNiftiAxialSliceCount(selectedFiles.t1);
-      if (!Number.isInteger(axialSlices) || axialSlices < 1) throw new Error("The selected MRI file does not include valid axial slice metadata.");
-      const initialSlice = Math.floor((axialSlices - 1) / 2);
-      setSliceCount(axialSlices); setSlice(initialSlice);
-      const job = await submitInference(selectedFiles, controller.signal);
-      setJobId(job.job_id); setPhase(phaseFor(job as InferenceStatus));
-      const finalStatus = await waitForInferenceStatus(job.job_id, (next) => setPhase(phaseFor(next)), controller.signal);
-      if (finalStatus.status !== "completed") throw new Error("AI segmentation could not be completed for this MRI study. Please try again.");
-      setPhase("Generating visualization...");
-      await replaceVisualization(job.job_id, initialSlice);
-      const completion = await completeReal.mutateAsync({ jobId: job.job_id, files: modalities.map(({ value }) => ({ modality: value, fileName: selectedFiles[value].name })) });
-      setCompleted(completion); setPhase("Segmentation completed"); void utils.demo.status.invalidate();
+      await withTimeout(validateDemo.mutateAsync({ files: validationFiles }), 120_000, "Secure MRI validation is taking longer than expected. Please try again.");
+      setPhase("AI segmentation running...");
+      const result = await submitInference(selectedFiles, controller.signal);
+      const completion = await completeReal.mutateAsync({ files: modalities.map(({ value }) => ({ modality: value, fileName: selectedFiles[value].name })) });
+      setPrediction(result); setCompleted(completion); setPhase("Segmentation completed"); void utils.demo.status.invalidate();
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       setInferenceError(safeMessage(error)); setPhase("idle");
@@ -143,9 +97,9 @@ export default function DemoPage() {
       <fieldset className="study-intake"><legend>Upload MRI files</legend><p>Required modalities: T1, T1CE, T2, and FLAIR. Supported: `.nii.gz` only.</p><div className="study-intake-actions"><button type="button" className="upload-choice" onClick={() => fileInput.current?.click()} disabled={busy}><Upload size={17} /> Upload MRI files</button><button type="button" className="upload-choice" onClick={() => folderInput.current?.click()} disabled={busy}><FolderUp size={17} /> Upload MRI folder</button></div><input ref={fileInput} className="sr-only" type="file" multiple accept=".nii.gz,application/gzip,application/x-gzip" onChange={collect} /><input ref={folderInput} className="sr-only" type="file" multiple onChange={collect} /></fieldset>
       {ignored.length > 0 && candidates.length === 0 && <p className="auth-error" role="alert">No supported compressed NIfTI MRI files were detected. Files must use the `.nii.gz` extension and include a recognized modality.</p>}
       {candidates.length > 0 && <section className="detected-study" aria-live="polite"><div><p className="amber-label">MRI STUDY READY</p><span>{candidates.length} MRI files detected</span></div>{modalities.map(({ value, label }) => <div className="detected-modality" key={value}><strong>{label}</strong>{grouped[value].length === 1 ? <span><Check size={15} /> {grouped[value][0]?.file.name}</span> : grouped[value].length > 1 ? <label>Multiple possible {label} files detected<select value={selected[value] ?? 0} onChange={(event) => setSelected((current) => ({ ...current, [value]: Number(event.target.value) }))} disabled={busy}>{grouped[value].map((candidate, index) => <option key={`${candidate.file.name}-${index}`} value={index}>{candidate.relativePath || candidate.file.name}</option>)}</select></label> : <span className="missing-modality"><FileWarning size={15} /> {label} file not detected</span>}</div>)}{missing.length > 0 && <p className="incomplete-warning"><FileWarning size={16} /> This MRI study is incomplete. Missing: {missing.join(", ")}.</p>}{ignored.length > 0 && <details className="ignored-files"><summary>{ignored.length} unsupported file{ignored.length === 1 ? " was" : "s were"} ignored</summary><ul>{ignored.map((name) => <li key={name}>{name}</li>)}</ul></details>}</section>}
-      {(busy || phase === "Segmentation completed" || inferenceError) && <section className="detected-study inference-status" aria-live="polite"><div><p className="amber-label">AI SEGMENTATION</p><span>{phase === "idle" ? "Inference could not be completed" : phase}</span></div>{jobId && <div className="detected-modality"><strong>GPU JOB</strong><span>{phase === "Segmentation completed" ? "Completed" : "Processing"}</span></div>}{inferenceError && <p className="auth-error" role="alert">{inferenceError}</p>}</section>}
+      {(busy || phase === "Segmentation completed" || inferenceError) && <section className="detected-study inference-status" aria-live="polite"><div><p className="amber-label">AI SEGMENTATION</p><span>{phase === "idle" ? "Inference could not be completed" : phase}</span></div>{inferenceError && <p className="auth-error" role="alert">{inferenceError}</p>}</section>}
       {!completed && <button className="primary-action" type="submit" disabled={!complete || busy || completeReal.isPending}>{busy ? <><LoaderCircle className="spin-icon" size={16} /> {phase}</> : "Run AI analysis"}</button>}
     </form>
-    {completed && visualizationUrl && sliceCount && <section className="detected-study demo-result" aria-live="polite"><div><p className="amber-label">SEGMENTATION COMPLETED</p><span>Whole Tumor, Tumor Core, and Enhancing Tumor overlay</span></div><img src={visualizationUrl} className="demo-result-image" alt={`AI-assisted segmentation visualization for axial slice ${slice + 1}`} /><label className="demo-slice-control">Axial slice <span>Slice {slice + 1} / {sliceCount}</span><input type="range" min="0" max={sliceCount - 1} value={slice} onChange={(event) => selectSlice(Number(event.target.value))} aria-label="Segmentation visualization axial slice" /></label>{inferenceError && <p className="auth-error" role="alert">{inferenceError}</p>}<div className="demo-actions"><a href="/signup" className="primary-action">Create account</a><a href="/login" className="neuro-text-link">Sign in</a></div></section>}
+    {completed && prediction && <section className="detected-study demo-result" aria-live="polite"><div><p className="amber-label">SEGMENTATION COMPLETED</p><span>AI-assisted volumetric segmentation summary</span></div><div className="prediction-summary" aria-label="Segmentation volume summary"><div><strong>Whole Tumor</strong><span>{prediction.tumor_voxels.WT.toLocaleString()} voxels</span></div><div><strong>Tumor Core</strong><span>{prediction.tumor_voxels.TC.toLocaleString()} voxels</span></div><div><strong>Enhancing Tumor</strong><span>{prediction.tumor_voxels.ET.toLocaleString()} voxels</span></div></div><p className="prediction-note">Input volume: {prediction.input_shape.join(" × ")}. This AI-assisted segmentation summary supports clinical review and does not provide a diagnosis.</p><div className="demo-actions"><a href="/signup" className="primary-action">Create account</a><a href="/login" className="neuro-text-link">Sign in</a></div></section>}
   </main>;
 }

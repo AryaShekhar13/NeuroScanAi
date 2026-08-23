@@ -77,5 +77,5 @@
 - [x] Supersede the old external inference failure-path check after the original endpoint was retired; safe retry handling remains in the direct client.
 - [x] Supersede the previous PNG/slice-rendering verification because the current `/predict` API returns a synchronous volumetric summary rather than an image endpoint.
 - [x] Replace expired temporary endpoints and verify browser connectivity to the current user-supplied CORS-enabled inference service.
-- [ ] Replace the superseded inference endpoint with the new CORS-enabled `/predict` API contract and test its real four-volume browser flow.
+- [x] Replace the superseded inference endpoint with the new CORS-enabled `/predict` API contract and verify its live four-volume browser flow, including the returned Whole Tumor, Tumor Core, and Enhancing Tumor voxel summary.
 - [x] Replace obsolete job polling and PNG rendering with the verified synchronous `/predict` volumetric result contract while preserving one-time demo enforcement.

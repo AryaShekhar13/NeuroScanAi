@@ -39,6 +39,7 @@ export default function DemoPage() {
   const lastVisualizationSlice = useRef<number | null>(null);
   const operationAbortRef = useRef<AbortController | null>(null);
   const visualizationAbortRef = useRef<AbortController | null>(null);
+  const sliceTimerRef = useRef<number | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [ignored, setIgnored] = useState<string[]>([]);
   const [selected, setSelected] = useState<Partial<Record<Modality, number>>>({});
@@ -57,7 +58,7 @@ export default function DemoPage() {
   useEffect(() => {
     folderInput.current?.setAttribute("webkitdirectory", "");
     folderInput.current?.setAttribute("directory", "");
-    return () => { operationAbortRef.current?.abort(); visualizationAbortRef.current?.abort(); if (visualizationUrlRef.current) URL.revokeObjectURL(visualizationUrlRef.current); };
+    return () => { operationAbortRef.current?.abort(); visualizationAbortRef.current?.abort(); if (sliceTimerRef.current) window.clearTimeout(sliceTimerRef.current); if (visualizationUrlRef.current) URL.revokeObjectURL(visualizationUrlRef.current); };
   }, []);
 
   const grouped = useMemo(() => modalities.reduce((result, modality) => ({ ...result, [modality.value]: candidates.filter((candidate) => candidate.modality === modality.value) }), {} as Record<Modality, Candidate[]>), [candidates]);
@@ -82,14 +83,15 @@ export default function DemoPage() {
     setVisualizationUrl(nextUrl);
   }, []);
 
-  useEffect(() => {
-    if (!completed || !jobId || lastVisualizationSlice.current === slice) return;
-    const timer = window.setTimeout(() => {
+  const selectSlice = (nextSlice: number) => {
+    setSlice(nextSlice);
+    if (!completed || !jobId || lastVisualizationSlice.current === nextSlice) return;
+    if (sliceTimerRef.current) window.clearTimeout(sliceTimerRef.current);
+    sliceTimerRef.current = window.setTimeout(() => {
       setInferenceError(null); setPhase("Generating visualization...");
-      void replaceVisualization(jobId, slice).then(() => setPhase("Segmentation completed")).catch((error) => { if (error instanceof DOMException && error.name === "AbortError") return; setInferenceError(safeMessage(error)); setPhase("Segmentation completed"); });
+      void replaceVisualization(jobId, nextSlice).then(() => setPhase("Segmentation completed")).catch((error) => { if (error instanceof DOMException && error.name === "AbortError") return; setInferenceError(safeMessage(error)); setPhase("Segmentation completed"); });
     }, 300);
-    return () => window.clearTimeout(timer);
-  }, [completed, jobId, replaceVisualization, slice]);
+  };
 
   const collect = (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files; if (!files) return;
@@ -143,6 +145,6 @@ export default function DemoPage() {
       {(busy || phase === "Segmentation completed" || inferenceError) && <section className="detected-study inference-status" aria-live="polite"><div><p className="amber-label">AI SEGMENTATION</p><span>{phase === "idle" ? "Inference could not be completed" : phase}</span></div>{jobId && <div className="detected-modality"><strong>GPU JOB</strong><span>{phase === "Segmentation completed" ? "Completed" : "Processing"}</span></div>}{inferenceError && <p className="auth-error" role="alert">{inferenceError}</p>}</section>}
       {!completed && <button className="primary-action" type="submit" disabled={!complete || busy || completeReal.isPending}>{busy ? <><LoaderCircle className="spin-icon" size={16} /> {phase}</> : "Run AI analysis"}</button>}
     </form>
-    {completed && visualizationUrl && sliceCount && <section className="detected-study demo-result" aria-live="polite"><div><p className="amber-label">SEGMENTATION COMPLETED</p><span>Whole Tumor, Tumor Core, and Enhancing Tumor overlay</span></div><img src={visualizationUrl} className="demo-result-image" alt={`AI-assisted segmentation visualization for axial slice ${slice + 1}`} /><label className="demo-slice-control">Axial slice <span>Slice {slice + 1} / {sliceCount}</span><input type="range" min="0" max={sliceCount - 1} value={slice} onChange={(event) => setSlice(Number(event.target.value))} aria-label="Segmentation visualization axial slice" /></label>{inferenceError && <p className="auth-error" role="alert">{inferenceError}</p>}<div className="demo-actions"><a href="/signup" className="primary-action">Create account</a><a href="/login" className="neuro-text-link">Sign in</a></div></section>}
+    {completed && visualizationUrl && sliceCount && <section className="detected-study demo-result" aria-live="polite"><div><p className="amber-label">SEGMENTATION COMPLETED</p><span>Whole Tumor, Tumor Core, and Enhancing Tumor overlay</span></div><img src={visualizationUrl} className="demo-result-image" alt={`AI-assisted segmentation visualization for axial slice ${slice + 1}`} /><label className="demo-slice-control">Axial slice <span>Slice {slice + 1} / {sliceCount}</span><input type="range" min="0" max={sliceCount - 1} value={slice} onChange={(event) => selectSlice(Number(event.target.value))} aria-label="Segmentation visualization axial slice" /></label>{inferenceError && <p className="auth-error" role="alert">{inferenceError}</p>}<div className="demo-actions"><a href="/signup" className="primary-action">Create account</a><a href="/login" className="neuro-text-link">Sign in</a></div></section>}
   </main>;
 }

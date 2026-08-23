@@ -25,7 +25,13 @@ async function serviceError(response: Response) {
 
 async function request(url: string, init?: RequestInit, timeout = REQUEST_TIMEOUT_MS) {
   const signal = init?.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(timeout)]) : AbortSignal.timeout(timeout);
-  const response = await fetch(url, { ...init, signal });
+  let response: Response;
+  try {
+    response = await fetch(url, { ...init, signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") throw new Error("The AI inference service is taking longer than expected. Please try again later.");
+    throw error;
+  }
   if (!response.ok) throw await serviceError(response);
   return response;
 }

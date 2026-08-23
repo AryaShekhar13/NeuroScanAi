@@ -48,7 +48,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { clinicianProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { decodeUpload } from "./fileValidation";
-import { storagePut } from "./storage";
+import { storageGetSignedUrl, storagePut } from "./storage";
 
 const optionalShortText = (max: number) => z.string().trim().max(max).optional();
 const passwordRule = z.string().min(10, "Password must be at least 10 characters.").max(128).regex(/[A-Za-z]/, "Password must contain a letter.").regex(/\d/, "Password must contain a number.");
@@ -224,7 +224,19 @@ export const appRouter = router({
       return { study: await createStudy(ctx.clinician.id, { patientId: input.patientId, studyDate: input.studyDate, description: input.description, files: storedFiles }) };
     }),
   }),
-  analysis: router({ list: clinicianProcedure.query(({ ctx }) => listAnalysisJobs(ctx.clinician.id)), submitMock: clinicianProcedure.input(z.object({ studyId: z.number().int().positive() })).mutation(async ({ ctx, input }) => ({ job: await createMockAnalysis(ctx.clinician.id, input.studyId), notice: "Demo / mock analysis only. No clinical inference has been performed." })) }),
+  analysis: router({
+    list: clinicianProcedure.query(({ ctx }) => listAnalysisJobs(ctx.clinician.id)),
+    prepareReal: clinicianProcedure.input(z.object({ studyId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const ownedStudy = requireFound(await getStudyOwned(ctx.clinician.id, input.studyId), "Study");
+      const expected = ["t1", "t1ce", "t2", "flair"] as const;
+      const sourceFiles = expected.map((modality) => ownedStudy.files.find((file) => file.modality === modality && file.uploadStatus === "uploaded"));
+      if (sourceFiles.some((file) => !file)) throw new TRPCError({ code: "BAD_REQUEST", message: "This study requires uploaded T1, T1CE, T2, and FLAIR source volumes before analysis can run." });
+      const files = await Promise.all(sourceFiles.map(async (file) => ({ modality: file!.modality, fileName: file!.originalFilename, mimeType: file!.mimeType, url: await storageGetSignedUrl(file!.storagePath) })));
+      await createAuditLog(ctx.clinician.id, "CLINICAL_REAL_INFERENCE_PREPARED", "study", String(input.studyId), { modalityCount: files.length });
+      return { files };
+    }),
+    submitMock: clinicianProcedure.input(z.object({ studyId: z.number().int().positive() })).mutation(async ({ ctx, input }) => ({ job: await createMockAnalysis(ctx.clinician.id, input.studyId), notice: "Demo / mock analysis only. No clinical inference has been performed." })),
+  }),
   accessRequests: router({ create: publicProcedure.input(z.object({ name: z.string().trim().min(2).max(120), email: z.string().trim().email().max(320), company: optionalShortText(160), message: optionalShortText(2000) })).mutation(async ({ input }) => { await createAccessRequest(input); return { success: true } as const; }) }),
   workspaceFiles: router({
     list: protectedProcedure.query(({ ctx }) => listWorkspaceFiles(ctx.user.id)),

@@ -84,3 +84,5 @@
 - [x] Inspect the newly supplied inference endpoint and confirm its real `/predict` response returns a PNG data URL with the TC/WT/ET summary.
 - [x] Validate the real API image payload as a PNG data URL before rendering it in the existing segmentation-result panel.
 - [x] Replace the production-blocking base64 validation wait with a lightweight server-enforced one-time demo gate before direct real inference.
+- [ ] Replace the protected study viewer’s Run Demo Analysis button with real inference using the study’s stored T1, T1CE, T2, and FLAIR NIfTI files.
+- [ ] Render the returned real segmentation PNG and TC/WT/ET result summary in the authenticated study workspace without mock wording.

@@ -3,6 +3,7 @@ export type PredictResult = {
   status: "success";
   input_shape: [number, number, number];
   tumor_voxels: { WT: number; TC: number; ET: number };
+  visualization: { data_url: string; type?: string; encoding?: string; slice_axis?: string; slice_index?: number };
 };
 
 const configuredBaseUrl = import.meta.env.VITE_INFERENCE_API_BASE?.replace(/\/+$/, "");
@@ -46,6 +47,9 @@ export async function submitInference(files: Record<InferenceModality, File>, si
   const response = await request(`${getInferenceApiBaseUrl()}/predict`, { method: "POST", body, signal });
   const result = await response.json() as Partial<PredictResult>;
   const hasVoxelSummary = result.tumor_voxels && ["WT", "TC", "ET"].every((key) => Number.isFinite(result.tumor_voxels?.[key as keyof PredictResult["tumor_voxels"]]));
+  const pngDataUrl = result.visualization?.data_url;
+  const hasVisualization = typeof pngDataUrl === "string" && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(pngDataUrl);
   if (result.status !== "success" || !Array.isArray(result.input_shape) || result.input_shape.length !== 3 || !hasVoxelSummary) throw new Error("The AI inference service did not return a complete segmentation summary.");
+  if (!hasVisualization) throw new Error("The AI inference service did not return a segmentation visualization image.");
   return result as PredictResult;
 }

@@ -29,7 +29,7 @@ async function request(url: string, init?: RequestInit, timeout = REQUEST_TIMEOU
   try {
     response = await fetch(url, { ...init, signal });
   } catch (error) {
-    if (error instanceof DOMException && error.name === "TimeoutError") throw new Error("The AI inference service is taking longer than expected. Please try again later.");
+    if (typeof error === "object" && error !== null && "name" in error && error.name === "TimeoutError") throw new Error("The AI inference service is taking longer than expected. Please try again later.");
     throw error;
   }
   if (!response.ok) throw await serviceError(response);

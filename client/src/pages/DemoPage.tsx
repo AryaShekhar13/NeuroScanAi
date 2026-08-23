@@ -25,8 +25,6 @@ function safeMessage(error: unknown) {
   if (error instanceof TypeError || (error instanceof Error && /failed to fetch|networkerror/i.test(error.message))) return "The AI inference service could not be reached. Check your connection and try again.";
   return error instanceof Error ? error.message : "The AI inference service could not complete this request. Please try again.";
 }
-function readAsBase64(file: File) { return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onerror = () => reject(new Error("The selected MRI file could not be read.")); reader.onload = () => resolve(String(reader.result).split(",", 2)[1] || ""); reader.readAsDataURL(file); }); }
-function withTimeout<T>(promise: Promise<T>, milliseconds: number, message: string) { return new Promise<T>((resolve, reject) => { const timeout = window.setTimeout(() => reject(new Error(message)), milliseconds); promise.then((value) => { window.clearTimeout(timeout); resolve(value); }, (error) => { window.clearTimeout(timeout); reject(error); }); }); }
 
 export default function DemoPage() {
   const fileInput = useRef<HTMLInputElement>(null);
@@ -41,7 +39,7 @@ export default function DemoPage() {
   const [completed, setCompleted] = useState<{ notice: string; detected: Array<{ modality: Modality; fileName: string }> } | null>(null);
   const status = trpc.demo.status.useQuery();
   const utils = trpc.useUtils();
-  const validateDemo = trpc.demo.validate.useMutation();
+  const readyForReal = trpc.demo.readyForReal.useMutation();
   const completeReal = trpc.demo.completeReal.useMutation();
 
   useEffect(() => { folderInput.current?.setAttribute("webkitdirectory", ""); folderInput.current?.setAttribute("directory", ""); return () => operationAbortRef.current?.abort(); }, []);
@@ -75,11 +73,11 @@ export default function DemoPage() {
     operationAbortRef.current?.abort(); const controller = new AbortController(); operationAbortRef.current = controller;
     setInferenceError(null); setPhase("Uploading MRI...");
     try {
-      const validationFiles = await Promise.all(modalities.map(async ({ value }) => ({ modality: value, fileName: selectedFiles[value].name, mimeType: selectedFiles[value].type || "application/gzip", base64: await readAsBase64(selectedFiles[value]) })));
-      await withTimeout(validateDemo.mutateAsync({ files: validationFiles }), 120_000, "Secure MRI validation is taking longer than expected. Please try again.");
+      const inferenceFiles = modalities.map(({ value }) => ({ modality: value, fileName: selectedFiles[value].name }));
+      await readyForReal.mutateAsync({ files: inferenceFiles });
       setPhase("AI segmentation running...");
       const result = await submitInference(selectedFiles, controller.signal);
-      const completion = await completeReal.mutateAsync({ files: modalities.map(({ value }) => ({ modality: value, fileName: selectedFiles[value].name })) });
+      const completion = await completeReal.mutateAsync({ files: inferenceFiles });
       setPrediction(result); setCompleted(completion); setPhase("Segmentation completed"); void utils.demo.status.invalidate();
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
@@ -98,7 +96,7 @@ export default function DemoPage() {
       {ignored.length > 0 && candidates.length === 0 && <p className="auth-error" role="alert">No supported compressed NIfTI MRI files were detected. Files must use the `.nii.gz` extension and include a recognized modality.</p>}
       {candidates.length > 0 && <section className="detected-study" aria-live="polite"><div><p className="amber-label">MRI STUDY READY</p><span>{candidates.length} MRI files detected</span></div>{modalities.map(({ value, label }) => <div className="detected-modality" key={value}><strong>{label}</strong>{grouped[value].length === 1 ? <span><Check size={15} /> {grouped[value][0]?.file.name}</span> : grouped[value].length > 1 ? <label>Multiple possible {label} files detected<select value={selected[value] ?? 0} onChange={(event) => setSelected((current) => ({ ...current, [value]: Number(event.target.value) }))} disabled={busy}>{grouped[value].map((candidate, index) => <option key={`${candidate.file.name}-${index}`} value={index}>{candidate.relativePath || candidate.file.name}</option>)}</select></label> : <span className="missing-modality"><FileWarning size={15} /> {label} file not detected</span>}</div>)}{missing.length > 0 && <p className="incomplete-warning"><FileWarning size={16} /> This MRI study is incomplete. Missing: {missing.join(", ")}.</p>}{ignored.length > 0 && <details className="ignored-files"><summary>{ignored.length} unsupported file{ignored.length === 1 ? " was" : "s were"} ignored</summary><ul>{ignored.map((name) => <li key={name}>{name}</li>)}</ul></details>}</section>}
       {(busy || phase === "Segmentation completed" || inferenceError) && <section className="detected-study inference-status" aria-live="polite"><div><p className="amber-label">AI SEGMENTATION</p><span>{phase === "idle" ? "Inference could not be completed" : phase}</span></div>{inferenceError && <p className="auth-error" role="alert">{inferenceError}</p>}</section>}
-      {!completed && <button className="primary-action" type="submit" disabled={!complete || busy || completeReal.isPending}>{busy ? <><LoaderCircle className="spin-icon" size={16} /> {phase}</> : "Run AI analysis"}</button>}
+      {!completed && <button className="primary-action" type="submit" disabled={!complete || busy || readyForReal.isPending || completeReal.isPending}>{busy ? <><LoaderCircle className="spin-icon" size={16} /> {phase}</> : "Run AI analysis"}</button>}
     </form>
     {completed && prediction && <section className="detected-study demo-result" aria-live="polite"><div><p className="amber-label">SEGMENTATION COMPLETED</p><span>AI-assisted segmentation visualization and volumetric summary</span></div><img src={prediction.visualization.data_url} className="demo-result-image" alt="AI-assisted tumor segmentation visualization generated from the submitted MRI study" /><div className="prediction-summary" aria-label="Segmentation volume summary"><div><strong>Whole Tumor</strong><span>{prediction.tumor_voxels.WT.toLocaleString()} voxels</span></div><div><strong>Tumor Core</strong><span>{prediction.tumor_voxels.TC.toLocaleString()} voxels</span></div><div><strong>Enhancing Tumor</strong><span>{prediction.tumor_voxels.ET.toLocaleString()} voxels</span></div></div><p className="prediction-note">Input volume: {prediction.input_shape.join(" × ")}. This AI-assisted segmentation summary supports clinical review and does not provide a diagnosis.</p><div className="demo-actions"><a href="/signup" className="primary-action">Create account</a><a href="/login" className="neuro-text-link">Sign in</a></div></section>}
   </main>;

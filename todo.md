@@ -83,3 +83,4 @@
 - [ ] Fetch and display a real API-generated segmentation PNG from the existing analysis action after successful four-volume inference, without using placeholder imagery.
 - [x] Inspect the newly supplied inference endpoint and confirm its real `/predict` response returns a PNG data URL with the TC/WT/ET summary.
 - [x] Validate the real API image payload as a PNG data URL before rendering it in the existing segmentation-result panel.
+- [x] Replace the production-blocking base64 validation wait with a lightweight server-enforced one-time demo gate before direct real inference.

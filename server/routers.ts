@@ -140,6 +140,15 @@ export const appRouter = router({
       if (!inspection.complete) throw new TRPCError({ code: "BAD_REQUEST", message: "This MRI study is incomplete. Add missing modalities and resolve duplicate selections before running the demo." });
       return { ready: true, detected: inspection.files.map((file) => ({ modality: file.modality, fileName: file.fileName, metadata: file.metadata })) };
     }),
+    readyForReal: publicProcedure.input(demoInferenceCompletionInput).mutation(async ({ ctx, input }) => {
+      const token = readDemoVisitorToken(ctx.req.headers.cookie) ?? createDemoVisitorToken();
+      if (!readDemoVisitorToken(ctx.req.headers.cookie)) setDemoVisitorCookie(ctx.res, token);
+      const tokenHash = hashDemoVisitorToken(token);
+      const bindingHash = demoVisitorBindingHash(ctx.req.ip, ctx.req.headers["user-agent"]);
+      const visitor = await getOrCreateDemoVisitor(tokenHash, demoIpHash(ctx.req.ip), bindingHash);
+      if (visitor.usedAt) throw new TRPCError({ code: "FORBIDDEN", message: "Your free analysis has been used. Create an account to continue using NeuroScan AI." });
+      return { ready: true, files: input.files };
+    }),
     run: publicProcedure.input(z.object({ files: z.array(clinicalFileInput).min(1).max(4).superRefine((files, issue) => { if (new Set(files.map((file) => file.modality)).size !== files.length) issue.addIssue({ code: "custom", message: "Each MRI modality can only be uploaded once." }); }) })).mutation(async ({ ctx, input }) => {
       const token = readDemoVisitorToken(ctx.req.headers.cookie) ?? createDemoVisitorToken();
       if (!readDemoVisitorToken(ctx.req.headers.cookie)) setDemoVisitorCookie(ctx.res, token);

@@ -122,3 +122,4 @@
 - [x] Replace the workspace preview with the user-supplied MRI segmentation comparison image.
 - [x] Update the lower landing-page workflow information with accurate MRI upload, analysis, segmentation, and clinical-review details.
 - [x] Restyle the lower landing-page workflow as connected directional steps with arrows instead of a statistics-style grid.
+- [x] Commit and push the latest verified landing-page updates to the connected private GitHub repository.

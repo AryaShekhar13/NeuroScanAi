@@ -45,6 +45,7 @@ import {
 } from "./clinicalAuth";
 import { assertNiftiSpatialCompatibility, decodeClinicalUpload, decodeSegmentationNifti, inspectClinicalUploads, isNiftiSpatialMetadata } from "./clinicalFileValidation";
 import { sendPasswordResetEmail } from "./emailService";
+import { getGuestScanStatus } from "./guestScanLifecycle";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { clinicianProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -129,7 +130,8 @@ export const appRouter = router({
       const token = readDemoVisitorToken(ctx.req.headers.cookie) ?? createDemoVisitorToken();
       if (!readDemoVisitorToken(ctx.req.headers.cookie)) setDemoVisitorCookie(ctx.res, token);
       const visitor = await getOrCreateDemoVisitor(hashDemoVisitorToken(token), demoIpHash(ctx.req.ip), demoVisitorBindingHash(ctx.req.ip, ctx.req.headers["user-agent"]));
-      return { used: Boolean(visitor.usedAt) };
+      const guestScan = getGuestScanStatus(visitor.usedAt);
+      return { used: guestScan.guestScanCompleted, ...guestScan };
     }),
     validate: publicProcedure.input(z.object({ files: z.array(clinicalFileInput).min(1).max(4).superRefine((files, issue) => { if (new Set(files.map((file) => file.modality)).size !== files.length) issue.addIssue({ code: "custom", message: "Each MRI modality can only be uploaded once." }); }) })).mutation(async ({ ctx, input }) => {
       const token = readDemoVisitorToken(ctx.req.headers.cookie) ?? createDemoVisitorToken();
@@ -162,9 +164,8 @@ export const appRouter = router({
       let inspection;
       try { inspection = inspectClinicalUploads(input.files); } catch { throw new TRPCError({ code: "BAD_REQUEST", message: "File validation failed. The selected file could not be verified as a supported compressed MRI file." }); }
       if (!inspection.complete) throw new TRPCError({ code: "BAD_REQUEST", message: "This MRI study is incomplete. Add missing modalities and resolve duplicate selections before running the demo." });
-      if (!await consumeDemoVisitor(tokenHash, bindingHash)) throw new TRPCError({ code: "FORBIDDEN", message: "Your free analysis has been used. Create an account to continue using NeuroScan AI." });
-      await createAuditLog(null, "DEMO_ANALYSIS_COMPLETED", "demoVisitor", String(visitor.id), { modalityCount: inspection.files.length, totalBytes: inspection.totalBytes });
-      return { used: true, notice: "Demo analysis complete. This demonstration does not provide a clinical diagnosis or inference result.", detected: inspection.files.map((file) => ({ modality: file.modality, fileName: file.fileName, metadata: file.metadata })) };
+      await createAuditLog(null, "DEMO_NIFTI_VALIDATED", "demoVisitor", String(visitor.id), { modalityCount: inspection.files.length, totalBytes: inspection.totalBytes });
+      return { ready: true, notice: "NIfTI study validated. Guest access remains available until a scan completes successfully.", detected: inspection.files.map((file) => ({ modality: file.modality, fileName: file.fileName, metadata: file.metadata })) };
     }),
     completeReal: publicProcedure.input(demoInferenceCompletionInput).mutation(async ({ ctx, input }) => {
       const token = readDemoVisitorToken(ctx.req.headers.cookie) ?? createDemoVisitorToken();
@@ -172,8 +173,8 @@ export const appRouter = router({
       const tokenHash = hashDemoVisitorToken(token);
       const bindingHash = demoVisitorBindingHash(ctx.req.ip, ctx.req.headers["user-agent"]);
       const visitor = await getOrCreateDemoVisitor(tokenHash, demoIpHash(ctx.req.ip), bindingHash);
-      if (!await consumeDemoVisitor(tokenHash, bindingHash)) throw new TRPCError({ code: "FORBIDDEN", message: "Your free analysis has been used. Create an account to continue using NeuroScan AI." });
-      await createAuditLog(null, "DEMO_REAL_INFERENCE_COMPLETED", "demoVisitor", String(visitor.id), { modalityCount: input.files.length });
+      if (!await consumeDemoVisitor(tokenHash)) throw new TRPCError({ code: "FORBIDDEN", message: "Your free analysis has been used. Create an account to continue using NeuroScan AI." });
+      await createAuditLog(null, "DEMO_GUEST_SCAN_COMPLETED", "demoVisitor", String(visitor.id), { modalityCount: input.files.length });
       return { used: true, notice: "Segmentation completed. Create an account to continue using NeuroScan AI.", detected: input.files };
     }),
   }),

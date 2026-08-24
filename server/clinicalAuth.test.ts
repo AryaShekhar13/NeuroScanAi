@@ -1,7 +1,7 @@
 import { scrypt as scryptCallback } from "node:crypto";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
-import { createDemoVisitorToken, hashDemoVisitorToken, hashPassword, hashResetToken, readDemoVisitorToken, verifyPassword } from "./clinicalAuth";
+import { createDemoVisitorToken, hashDemoVisitorToken, hashPassword, hashResetToken, readDemoVisitorToken, setDemoVisitorCookie, verifyPassword } from "./clinicalAuth";
 
 describe("clinical credential security", () => {
   it("stores a salted password hash and verifies only the correct password", async () => {
@@ -32,5 +32,12 @@ describe("clinical credential security", () => {
     expect(hashDemoVisitorToken(token)).not.toBe(token);
     expect(readDemoVisitorToken(`neuroscan_demo_visitor=${token}`)).toBe(token);
     expect(readDemoVisitorToken("neuroscan_demo_visitor=invalid!token")).toBeNull();
+  });
+
+  it("sets the guest visitor token as a durable, HTTP-only cookie without treating it as a completed scan", () => {
+    const calls: Array<{ name: string; value: string; options: Record<string, unknown> }> = [];
+    setDemoVisitorCookie({ cookie: (name, value, options) => calls.push({ name, value, options: options as Record<string, unknown> }) } as never, "a".repeat(43));
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ name: "neuroscan_demo_visitor", value: "a".repeat(43), options: { httpOnly: true, sameSite: "lax", path: "/", maxAge: 31_536_000_000 } });
   });
 });

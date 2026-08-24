@@ -1,0 +1,2 @@
+ALTER TABLE `demoVisitors` DROP INDEX `demoVisitors_visitorBindingHash_unique`;--> statement-breakpoint
+CREATE INDEX `demoVisitors_binding_createdAt_idx` ON `demoVisitors` (`visitorBindingHash`,`createdAt`);

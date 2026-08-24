@@ -91,3 +91,6 @@
 - [x] Generate aligned PNG slice previews and overlays only as derived viewer artifacts, never as the segmentation source of truth.
 - [x] Update the clinician viewer to select aligned 3D NIfTI slices and disclose that previews are derived from the stored NIfTI volumes and mask.
 - [x] Ensure the NIfTI-first storage and validation workflow is usable while the inference API is inactive, without requiring a PNG response or mock segmentation output.
+- [x] Correct guest-scan persistence so eligibility is consumed only after a successful unauthenticated scan and remains consumed across later visits.
+- [x] Wire guest scan consumption to the post-success inference handoff and test the same-cookie eligible-to-consumed lifecycle.
+- [x] Add router-level verification that the same guest cookie remains eligible through preparation and becomes persistently consumed only at successful completion.

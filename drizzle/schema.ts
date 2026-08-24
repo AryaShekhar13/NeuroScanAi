@@ -115,11 +115,11 @@ export const demoVisitors = mysqlTable("demoVisitors", {
   id: int("id").autoincrement().primaryKey(),
   tokenHash: varchar("tokenHash", { length: 64 }).notNull().unique(),
   ipHash: varchar("ipHash", { length: 64 }).notNull(),
-  visitorBindingHash: varchar("visitorBindingHash", { length: 64 }).notNull().unique(),
+  visitorBindingHash: varchar("visitorBindingHash", { length: 64 }).notNull(),
   usedAt: timestamp("usedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-}, (table) => [index("demoVisitors_ip_createdAt_idx").on(table.ipHash, table.createdAt)]);
+}, (table) => [index("demoVisitors_ip_createdAt_idx").on(table.ipHash, table.createdAt), index("demoVisitors_binding_createdAt_idx").on(table.visitorBindingHash, table.createdAt)]);
 
 /** Public requests from the original landing experience. */
 export const accessRequests = mysqlTable("accessRequests", {

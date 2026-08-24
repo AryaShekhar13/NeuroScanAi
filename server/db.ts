@@ -135,19 +135,19 @@ export async function getOrCreateDemoVisitor(tokenHash: string, ipHash: string, 
   const db = requireDb(await getDb());
   const existing = (await db.select().from(demoVisitors).where(eq(demoVisitors.tokenHash, tokenHash)).limit(1))[0];
   if (existing) return existing;
-  const boundVisitor = (await db.select().from(demoVisitors).where(eq(demoVisitors.visitorBindingHash, visitorBindingHash)).limit(1))[0];
-  if (boundVisitor) return boundVisitor;
   try {
     const result = await db.insert(demoVisitors).values({ tokenHash, ipHash, visitorBindingHash });
     return (await db.select().from(demoVisitors).where(eq(demoVisitors.id, Number(result[0].insertId))).limit(1))[0]!;
-  } catch {
-    return (await db.select().from(demoVisitors).where(eq(demoVisitors.visitorBindingHash, visitorBindingHash)).limit(1))[0]!;
+  } catch (error) {
+    const concurrent = (await db.select().from(demoVisitors).where(eq(demoVisitors.tokenHash, tokenHash)).limit(1))[0];
+    if (concurrent) return concurrent;
+    throw error;
   }
 }
 
-export async function consumeDemoVisitor(tokenHash: string, visitorBindingHash: string) {
+export async function consumeDemoVisitor(tokenHash: string) {
   const db = requireDb(await getDb());
-  const result = await db.update(demoVisitors).set({ usedAt: new Date() }).where(and(eq(demoVisitors.tokenHash, tokenHash), eq(demoVisitors.visitorBindingHash, visitorBindingHash), isNull(demoVisitors.usedAt)));
+  const result = await db.update(demoVisitors).set({ usedAt: new Date() }).where(and(eq(demoVisitors.tokenHash, tokenHash), isNull(demoVisitors.usedAt)));
   return Number(result[0].affectedRows) === 1;
 }
 

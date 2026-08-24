@@ -119,3 +119,4 @@
 - [ ] Integrate and test pending/completed/failed external cleanup transitions only when the future GPU API supplies an authenticated temporary-artifact cleanup contract.
 - [ ] Replace the landing workspace section’s four modality categories with one truthful PNG derived from the supplied NIfTI source and authoritative tumor mask when available.
 - [x] Produce and label a single source-derived intensity-overlay preview for the landing workspace because no authoritative segmentation mask has yet been supplied.
+- [x] Replace the workspace preview with the user-supplied MRI segmentation comparison image.

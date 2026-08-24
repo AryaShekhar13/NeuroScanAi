@@ -83,7 +83,7 @@ export default function Home() {
 
         <section className="neuro-product neuro-section" id="product" aria-labelledby="product-title">
           <div className="product-heading" data-scroll-reveal><p className="amber-label">THE WORKSPACE</p><h2 id="product-title">One quiet place to look deeper.</h2><a href="/login" className="neuro-text-link">Open clinical workspace <ArrowUpRight size={16} strokeWidth={1.5} /></a></div>
-          <figure className="product-mockup product-overlay-preview" data-scroll-reveal data-reveal-delay="100"><img src="/manus-storage/neuroscan-nifti-intensity-overlay_4ffd2fac.png" alt="Single axial T1CE MRI slice with a gold source-derived intensity overlay" /><figcaption><span>NIFTI-DERIVED INTENSITY OVERLAY</span><span>AXIAL · T1CE · PREVIEW ONLY</span></figcaption><p>Source-derived display preview only. This overlay is not an authoritative segmentation or clinical finding.</p></figure>
+          <figure className="product-mockup product-overlay-preview" data-scroll-reveal data-reveal-delay="100"><img src="/manus-storage/neuroscan-segmentation-comparison_9d76a547.jpg" alt="Supplied brain MRI segmentation comparison showing FLAIR, T1C, T2, ground-truth, and prediction panels" /><figcaption><span>SEGMENTATION COMPARISON</span><span>FLAIR · T1C · T2 · GT · PREDICTION</span></figcaption><p>Reference comparison image supplied for product illustration. It is not a result generated for a NeuroScan study or a clinical finding.</p></figure>
         </section>
 
         <section className="neuro-workflow neuro-section" id="workflow" aria-labelledby="workflow-title" data-scroll-reveal>

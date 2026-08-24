@@ -17,12 +17,19 @@ Set production configuration through the project secret manager; do **not** comm
 | `ADMIN_EMAIL` | Yes for initial admin setup | Initial clinical administrator email. The server initializes this account only if absent. |
 | `ADMIN_INITIAL_PASSWORD` | Yes for initial admin setup | One-time administrator password supplied through secure deployment secrets. Only a bcrypt hash is stored; existing passwords are never overwritten. |
 | `MAX_SINGLE_FILE_SIZE` | Recommended | Maximum compressed upload size in bytes for one NIfTI file. Defaults to `8388608` (8 MiB). |
+| `MAX_MRI_UPLOAD_MB` | Optional override | Whole-megabyte maximum compressed upload size for one MRI file. When set, this takes precedence over `MAX_SINGLE_FILE_SIZE`; choose a value consistent with the hosted worker’s available memory. |
 | `MAX_STUDY_SIZE` | Recommended | Maximum total compressed upload size in bytes for one study. Defaults to `33554432` (32 MiB). |
 | `MAX_FOLDER_FILES` | Recommended | Maximum number of files examined in a selected folder. Defaults to `200`. |
 
 The platform supplies `DATABASE_URL`, `JWT_SECRET`, and managed object-storage credentials. They must remain platform-managed and must not be copied into a local configuration file.
 
 MRI inference endpoints are managed by authenticated clinical administrators at `/admin/settings`. The URL is stored server-side, is never returned to ordinary users or guests, and can be tested and changed without a frontend code change or redeployment. Do not put an upstream MRI API URL in a `VITE_` variable.
+
+## Durable analysis jobs and GPU boundary
+
+Each clinician analysis is assigned a persistent server-generated job identifier. Status progresses through queued, validation, volume preparation, AI segmentation, report-artifact check, saving, completion, or a retryable/failed state. The always-on worker owns processing rather than the browser, so a refresh returns the existing job state instead of creating another analysis. A stored authoritative segmentation checkpoint is finalized before any retry can queue another inference attempt.
+
+Original MRI inputs and completed `.nii.gz` segmentation masks remain in managed persistent object storage. The worker does not retain MRI bytes on local disk after a cycle. A future GPU API must provide its own authenticated cleanup contract for temporary Kaggle files; no unverified cleanup URL is called by this application. A storage or database failure is recorded as retryable, never reported as a completed analysis.
 
 ## Security and upload controls
 
@@ -39,7 +46,7 @@ pnpm test
 pnpm check
 ```
 
-The hardened suite covers credential hashing and legacy migration, reset-token hashing, SMTP configuration, NIfTI header and gzip handling, MIME and modality checks, and folder-level duplicate/completeness inspection. Release validation should also create a clearly labelled synthetic study with four harmless NIfTI fixtures and confirm that its study detail lists all four modalities.
+The hardened suite covers credential hashing and legacy migration, reset-token hashing, SMTP configuration, NIfTI header and gzip handling, configurable upload limits, MIME and modality checks, folder-level duplicate/completeness inspection, administrator authorization, and durable job retry semantics. Once a real HTTPS API is configured, release validation must run a complete non-production `.nii.gz` study through persistent job creation, refresh recovery, returned-mask alignment, storage, and viewer review. Do not substitute a fake result or confidence score.
 
 ## Clinical scope
 

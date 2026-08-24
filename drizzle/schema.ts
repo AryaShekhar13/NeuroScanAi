@@ -83,25 +83,49 @@ export const studyFiles = mysqlTable("studyFiles", {
 
 export const analysisJobs = mysqlTable("analysisJobs", {
   id: int("id").autoincrement().primaryKey(),
+  jobKey: varchar("jobKey", { length: 40 }).unique(),
   studyId: int("studyId").notNull().references(() => studies.id, { onDelete: "cascade" }),
   createdBy: int("createdBy").notNull().references(() => clinicianAccounts.id, { onDelete: "cascade" }),
   modelName: varchar("modelName", { length: 160 }).notNull(),
   modelVersion: varchar("modelVersion", { length: 100 }).notNull(),
-  status: mysqlEnum("status", ["queued", "processing", "completed", "failed", "needs_review"]).default("queued").notNull(),
+  status: mysqlEnum("status", ["queued", "validating", "uploading", "processing", "generating_report", "saving", "completed", "failed", "retryable", "needs_review"]).default("queued").notNull(),
   isDemo: int("isDemo").default(1).notNull(),
+  attemptCount: int("attemptCount").default(0).notNull(),
+  remoteJobId: varchar("remoteJobId", { length: 160 }),
+  workerLeaseUntil: timestamp("workerLeaseUntil"),
+  progressMessage: varchar("progressMessage", { length: 240 }),
+  failureCode: varchar("failureCode", { length: 80 }),
+  failureStage: varchar("failureStage", { length: 80 }),
+  resultCheckpointPath: varchar("resultCheckpointPath", { length: 512 }),
+  resultCheckpointMetadata: json("resultCheckpointMetadata"),
+  temporaryArtifactRef: varchar("temporaryArtifactRef", { length: 512 }),
+  cleanupStatus: mysqlEnum("cleanupStatus", ["not_required", "pending", "completed", "failed", "unsupported"]).default("not_required").notNull(),
+  cleanupMessage: varchar("cleanupMessage", { length: 240 }),
+  cleanupAttemptedAt: timestamp("cleanupAttemptedAt"),
   submittedAt: timestamp("submittedAt").defaultNow().notNull(),
   startedAt: timestamp("startedAt"),
   completedAt: timestamp("completedAt"),
   errorMessage: text("errorMessage"),
-}, (table) => [index("analysisJobs_owner_status_idx").on(table.createdBy, table.status)]);
+}, (table) => [index("analysisJobs_owner_status_idx").on(table.createdBy, table.status), index("analysisJobs_worker_idx").on(table.status, table.workerLeaseUntil)]);
 
 export const analysisResults = mysqlTable("analysisResults", {
   id: int("id").autoincrement().primaryKey(),
   analysisJobId: int("analysisJobId").notNull().references(() => analysisJobs.id, { onDelete: "cascade" }),
   segmentationStoragePath: varchar("segmentationStoragePath", { length: 512 }),
+  reportStoragePath: varchar("reportStoragePath", { length: 512 }),
   resultMetadata: json("resultMetadata"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
+
+/** Immutable status history for refresh recovery, stage-specific errors, and administrator audit. */
+export const analysisJobEvents = mysqlTable("analysisJobEvents", {
+  id: int("id").autoincrement().primaryKey(),
+  analysisJobId: int("analysisJobId").notNull().references(() => analysisJobs.id, { onDelete: "cascade" }),
+  stage: varchar("stage", { length: 80 }).notNull(),
+  message: varchar("message", { length: 240 }).notNull(),
+  details: json("details"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => [index("analysisJobEvents_job_createdAt_idx").on(table.analysisJobId, table.createdAt)]);
 
 export const auditLogs = mysqlTable("auditLogs", {
   id: int("id").autoincrement().primaryKey(),

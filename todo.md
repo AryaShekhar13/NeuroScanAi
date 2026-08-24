@@ -107,3 +107,13 @@
 - [x] Preserve the MRI API endpoint as unset while keeping the administrator save-and-test workflow ready for a future real HTTPS URL.
 - [x] Publish the secure administrator release with the MRI inference service clearly awaiting API configuration.
 - [x] Verify the administrator release in the browser and publish the completed secure configuration workflow.
+- [x] Select an execution architecture that can safely support durable MRI job recovery, GPU cleanup, and retry behavior without relying on browser state.
+- [x] Add persistent job IDs, stage-aware statuses, ownership-scoped recovery, retryable failure records, and scan-to-job relationships.
+- [x] Extend the NIfTI-authoritative viewer with overlay on/off, opacity, supported WT/TC/ET controls, current-slice feedback, and AI-assisted disclosure.
+- [x] Add meaningful stage-specific progress and failure presentation that survives refresh or navigation without launching duplicate inference.
+- [x] Strengthen configurable MRI upload limits and pre-inference NIfTI validation, including clear oversized and malformed-file errors.
+- [x] Preserve results in persistent storage, distinguish temporary external GPU artifacts, and record storage-stage failures for safe recovery.
+- [x] Add quality/model metadata presentation only when provided by a reliable backend source; never fabricate confidence metrics.
+- [ ] Test real NIfTI processing when a live API is supplied plus simulated oversized, corruption, inference, report, storage, and refresh-recovery failures.
+- [x] Track temporary external GPU artifact cleanup state separately from persistent user results and add specific storage-upload versus database-finalization failure codes.
+- [ ] Integrate and test pending/completed/failed external cleanup transitions only when the future GPU API supplies an authenticated temporary-artifact cleanup contract.

@@ -1,0 +1,1 @@
+ALTER TABLE `analysisJobs` ADD `resultCheckpointMetadata` json;

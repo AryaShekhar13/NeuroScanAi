@@ -7,7 +7,7 @@ vi.mock("./db", () => {
   return {
     checkAuthRateLimit: empty, consumePasswordReset: empty, createAccessRequest: empty, createAuditLog: empty, createClinician: empty, createMockAnalysis: empty, recordAuthoritativeNiftiSegmentation: empty, createPatient: empty, createStudy: empty, createWorkspaceFile: empty,
     consumeDemoVisitor: async (tokenHash: string) => { const visitor = state.visitors.get(tokenHash); if (!visitor || visitor.usedAt) return false; visitor.usedAt = new Date(); return true; },
-    getClinicianByEmail: empty, getDashboardMetrics: empty, getPatientOwned: empty, getStudyOwned: empty, invalidateClinicianSessions: empty, listAnalysisJobs: empty, listPatients: empty, listStudies: empty, listWorkspaceFiles: empty,
+    getClinicianByEmail: empty, getDashboardMetrics: empty, getPatientOwned: empty, getStudyOwned: empty, getSystemConfiguration: async () => ({ inferenceApiBaseUrl: null }), invalidateClinicianSessions: empty, listAnalysisJobs: empty, listPatients: empty, listStudies: empty, listWorkspaceFiles: empty,
     getOrCreateDemoVisitor: async (tokenHash: string) => { const existing = state.visitors.get(tokenHash); if (existing) return existing; const visitor = { id: state.nextId++, usedAt: null }; state.visitors.set(tokenHash, visitor); return visitor; },
     registerAuthRateAttempt: empty, setPasswordReset: empty, touchClinicianLogin: empty, updateClinicianPasswordHash: empty,
   };

@@ -1,7 +1,8 @@
-import { and, count, desc, eq, gt, isNull, like, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, isNotNull, isNull, like, lt, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   accessRequests,
+  analysisJobEvents,
   analysisJobs,
   analysisResults,
   auditLogs,
@@ -244,6 +245,111 @@ export async function createMockAnalysis(ownerId: number, studyId: number) {
   await db.update(studies).set({ status: "queued" }).where(eq(studies.id, studyId));
   await createAuditLog(ownerId, "ANALYSIS_MOCK_SUBMITTED", "analysisJob", String(id), { studyId });
   return (await db.select().from(analysisJobs).where(eq(analysisJobs.id, id)).limit(1))[0];
+}
+
+export const DURABLE_ANALYSIS_STATUSES = ["queued", "validating", "uploading", "processing", "generating_report", "saving", "completed", "failed", "retryable", "needs_review"] as const;
+export type DurableAnalysisStatus = (typeof DURABLE_ANALYSIS_STATUSES)[number];
+const ACTIVE_ANALYSIS_STATUSES = new Set<DurableAnalysisStatus>(["queued", "validating", "uploading", "processing", "generating_report", "saving", "retryable"]);
+
+export async function createDurableAnalysisJob(ownerId: number, studyId: number) {
+  const db = requireDb(await getDb());
+  const study = await getStudyOwned(ownerId, studyId);
+  if (!study) throw new Error("Study not found or not authorized.");
+  const existing = (await db.select().from(analysisJobs).where(and(eq(analysisJobs.studyId, studyId), eq(analysisJobs.createdBy, ownerId))).orderBy(desc(analysisJobs.submittedAt)).limit(12)).find((job) => ACTIVE_ANALYSIS_STATUSES.has(job.status as DurableAnalysisStatus) && Boolean(job.jobKey));
+  if (existing) return { job: existing, created: false };
+  const configuration = await getSystemConfiguration();
+  const jobKey = crypto.randomUUID().replace(/-/g, "");
+  const result = await db.insert(analysisJobs).values({ jobKey, studyId, createdBy: ownerId, modelName: configuration.modelName ?? "MRI API awaiting configuration", modelVersion: configuration.modelVersion ?? "unconfigured", status: "queued", isDemo: 0, progressMessage: "Queued for secure NIfTI validation." });
+  const jobId = Number(result[0].insertId);
+  await db.insert(analysisJobEvents).values({ analysisJobId: jobId, stage: "queued", message: "Analysis job created. Original NIfTI data remains in persistent storage." });
+  await db.update(studies).set({ status: "queued" }).where(eq(studies.id, studyId));
+  await createAuditLog(ownerId, "ANALYSIS_JOB_CREATED", "analysisJob", String(jobId), { jobKey, studyId });
+  return { job: (await db.select().from(analysisJobs).where(eq(analysisJobs.id, jobId)).limit(1))[0]!, created: true };
+}
+
+export async function getDurableAnalysisJobOwned(ownerId: number, jobKey: string) {
+  const db = requireDb(await getDb());
+  const job = (await db.select().from(analysisJobs).where(and(eq(analysisJobs.createdBy, ownerId), eq(analysisJobs.jobKey, jobKey))).limit(1))[0];
+  if (!job) return undefined;
+  const [events, results] = await Promise.all([
+    db.select().from(analysisJobEvents).where(eq(analysisJobEvents.analysisJobId, job.id)).orderBy(desc(analysisJobEvents.createdAt)),
+    db.select().from(analysisResults).where(eq(analysisResults.analysisJobId, job.id)).orderBy(desc(analysisResults.createdAt)),
+  ]);
+  return { job, events, results };
+}
+
+export async function listDurableAnalysisJobsOwned(ownerId: number, studyId?: number) {
+  const db = requireDb(await getDb());
+  const filter = studyId ? and(eq(analysisJobs.createdBy, ownerId), eq(analysisJobs.studyId, studyId), isNotNull(analysisJobs.jobKey)) : and(eq(analysisJobs.createdBy, ownerId), isNotNull(analysisJobs.jobKey));
+  return db.select().from(analysisJobs).where(filter).orderBy(desc(analysisJobs.submittedAt));
+}
+
+export async function transitionDurableAnalysisJob(jobId: number, input: { status: DurableAnalysisStatus; message: string; failureCode?: string | null; failureStage?: string | null; errorMessage?: string | null; resultCheckpointPath?: string | null; resultCheckpointMetadata?: Record<string, unknown> | null; temporaryArtifactRef?: string | null; cleanupStatus?: "not_required" | "pending" | "completed" | "failed" | "unsupported"; cleanupMessage?: string | null; cleanupAttemptedAt?: Date | null; workerLeaseUntil?: Date | null; modelName?: string; modelVersion?: string }) {
+  const db = requireDb(await getDb());
+  const update: Record<string, unknown> = { status: input.status, progressMessage: input.message.slice(0, 240), failureCode: input.failureCode ?? null, failureStage: input.failureStage ?? null, errorMessage: input.errorMessage ?? null, workerLeaseUntil: input.workerLeaseUntil ?? null };
+  if (input.status === "completed") update.completedAt = new Date();
+  if (input.resultCheckpointPath !== undefined) update.resultCheckpointPath = input.resultCheckpointPath;
+  if (input.resultCheckpointMetadata !== undefined) update.resultCheckpointMetadata = input.resultCheckpointMetadata;
+  if (input.temporaryArtifactRef !== undefined) update.temporaryArtifactRef = input.temporaryArtifactRef;
+  if (input.cleanupStatus !== undefined) update.cleanupStatus = input.cleanupStatus;
+  if (input.cleanupMessage !== undefined) update.cleanupMessage = input.cleanupMessage;
+  if (input.cleanupAttemptedAt !== undefined) update.cleanupAttemptedAt = input.cleanupAttemptedAt;
+  if (input.modelName) update.modelName = input.modelName;
+  if (input.modelVersion) update.modelVersion = input.modelVersion;
+  await db.update(analysisJobs).set(update as any).where(eq(analysisJobs.id, jobId));
+  await db.insert(analysisJobEvents).values({ analysisJobId: jobId, stage: input.status, message: input.message.slice(0, 240), details: input.failureCode ? { failureCode: input.failureCode, failureStage: input.failureStage ?? input.status } : null });
+}
+
+export async function claimQueuedDurableAnalysisJob() {
+  const db = requireDb(await getDb());
+  const candidate = (await db.select().from(analysisJobs).where(and(eq(analysisJobs.status, "queued"), isNotNull(analysisJobs.jobKey))).orderBy(analysisJobs.submittedAt).limit(1))[0];
+  if (!candidate) return undefined;
+  const leaseUntil = new Date(Date.now() + 10 * 60_000);
+  const claim = await db.update(analysisJobs).set({ status: "validating", progressMessage: "Validating original NIfTI volumes.", startedAt: candidate.startedAt ?? new Date(), workerLeaseUntil: leaseUntil, attemptCount: sql`${analysisJobs.attemptCount} + 1` }).where(and(eq(analysisJobs.id, candidate.id), eq(analysisJobs.status, "queued")));
+  if (Number(claim[0].affectedRows) !== 1) return undefined;
+  await db.insert(analysisJobEvents).values({ analysisJobId: candidate.id, stage: "validating", message: "Worker claimed job and started source NIfTI validation." });
+  return (await db.select().from(analysisJobs).where(eq(analysisJobs.id, candidate.id)).limit(1))[0];
+}
+
+export async function recoverExpiredDurableAnalysisLeases() {
+  const db = requireDb(await getDb());
+  const expired = await db.select().from(analysisJobs).where(and(isNotNull(analysisJobs.jobKey), isNotNull(analysisJobs.workerLeaseUntil), lt(analysisJobs.workerLeaseUntil, new Date()))).limit(20);
+  for (const job of expired) {
+    if (!ACTIVE_ANALYSIS_STATUSES.has(job.status as DurableAnalysisStatus) || job.status === "queued") continue;
+    await transitionDurableAnalysisJob(job.id, { status: "retryable", message: "Worker lease expired; the job can resume without creating a duplicate inference.", failureCode: "WORKER_LEASE_EXPIRED", failureStage: job.status });
+  }
+}
+
+export async function getDurableAnalysisJobForWorker(jobId: number) {
+  const db = requireDb(await getDb());
+  const job = (await db.select().from(analysisJobs).where(eq(analysisJobs.id, jobId)).limit(1))[0];
+  if (!job) return undefined;
+  const [study, files] = await Promise.all([
+    (await db.select().from(studies).where(eq(studies.id, job.studyId)).limit(1))[0],
+    db.select().from(studyFiles).where(eq(studyFiles.studyId, job.studyId)),
+  ]);
+  if (!study) return undefined;
+  return { job, study, files };
+}
+
+export async function completeDurableAnalysisJob(jobId: number, input: { segmentationStoragePath: string; resultMetadata: Record<string, unknown>; modelName?: string; modelVersion?: string }) {
+  const db = requireDb(await getDb());
+  const job = (await db.select().from(analysisJobs).where(eq(analysisJobs.id, jobId)).limit(1))[0];
+  if (!job) throw new Error("Analysis job not found.");
+  const existing = (await db.select().from(analysisResults).where(eq(analysisResults.analysisJobId, jobId)).limit(1))[0];
+  if (!existing) await db.insert(analysisResults).values({ analysisJobId: jobId, segmentationStoragePath: input.segmentationStoragePath, resultMetadata: input.resultMetadata });
+  await db.update(analysisJobs).set({ status: "completed", progressMessage: "Results saved to persistent storage.", completedAt: new Date(), workerLeaseUntil: null, failureCode: null, failureStage: null, errorMessage: null, resultCheckpointPath: input.segmentationStoragePath, resultCheckpointMetadata: input.resultMetadata, modelName: input.modelName ?? job.modelName, modelVersion: input.modelVersion ?? job.modelVersion }).where(eq(analysisJobs.id, jobId));
+  await db.update(studies).set({ status: "completed" }).where(eq(studies.id, job.studyId));
+  await db.insert(analysisJobEvents).values({ analysisJobId: jobId, stage: "completed", message: "Authoritative segmentation NIfTI saved to persistent storage." });
+  await createAuditLog(job.createdBy, "ANALYSIS_JOB_COMPLETED", "analysisJob", String(jobId), { jobKey: job.jobKey, studyId: job.studyId });
+}
+
+export async function finalizeDurableResultCheckpoint(ownerId: number, jobKey: string) {
+  const db = requireDb(await getDb());
+  const job = (await db.select().from(analysisJobs).where(and(eq(analysisJobs.createdBy, ownerId), eq(analysisJobs.jobKey, jobKey))).limit(1))[0];
+  if (!job?.resultCheckpointPath || !job.resultCheckpointMetadata || typeof job.resultCheckpointMetadata !== "object") return false;
+  await completeDurableAnalysisJob(job.id, { segmentationStoragePath: job.resultCheckpointPath, resultMetadata: job.resultCheckpointMetadata as Record<string, unknown>, modelName: job.modelName, modelVersion: job.modelVersion });
+  return true;
 }
 
 export async function recordAuthoritativeNiftiSegmentation(ownerId: number, input: { studyId: number; segmentationStoragePath: string; resultMetadata: Record<string, unknown> }) {

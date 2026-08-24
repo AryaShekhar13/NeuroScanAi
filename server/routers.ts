@@ -6,6 +6,8 @@ import {
   consumePasswordReset,
   createAccessRequest,
   createAuditLog,
+  createDurableAnalysisJob,
+  finalizeDurableResultCheckpoint,
   getAdminSystemOverview,
   createClinician,
   createMockAnalysis,
@@ -16,12 +18,14 @@ import {
   createWorkspaceFile,
   consumeDemoVisitor,
   getClinicianByEmail,
+  getDurableAnalysisJobOwned,
   getDashboardMetrics,
   getPatientOwned,
   getSystemConfiguration,
   getStudyOwned,
   invalidateClinicianSessions,
   listAnalysisJobs,
+  listDurableAnalysisJobsOwned,
   listPatients,
   listStudies,
   listWorkspaceFiles,
@@ -31,6 +35,7 @@ import {
   touchClinicianLogin,
   updateClinicianPasswordHash,
   updateSystemConfiguration,
+  transitionDurableAnalysisJob,
 } from "./db";
 import {
   clearClinicianSessionCookie,
@@ -47,7 +52,7 @@ import {
   readDemoVisitorToken,
   verifyPassword,
 } from "./clinicalAuth";
-import { assertNiftiSpatialCompatibility, decodeClinicalUpload, decodeSegmentationNifti, inspectClinicalUploads, isNiftiSpatialMetadata } from "./clinicalFileValidation";
+import { assertNiftiSpatialCompatibility, decodeClinicalUpload, decodeSegmentationNifti, inspectClinicalUploads, isNiftiSpatialMetadata, uploadLimits } from "./clinicalFileValidation";
 import { sendPasswordResetEmail } from "./emailService";
 import { getGuestScanStatus } from "./guestScanLifecycle";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -136,7 +141,8 @@ export const appRouter = router({
       if (!readDemoVisitorToken(ctx.req.headers.cookie)) setDemoVisitorCookie(ctx.res, token);
       const visitor = await getOrCreateDemoVisitor(hashDemoVisitorToken(token), demoIpHash(ctx.req.ip), demoVisitorBindingHash(ctx.req.ip, ctx.req.headers["user-agent"]));
       const guestScan = getGuestScanStatus(visitor.usedAt);
-      return { used: guestScan.guestScanCompleted, ...guestScan };
+      const configuration = await getSystemConfiguration();
+      return { used: guestScan.guestScanCompleted, ...guestScan, limits: uploadLimits(), inferenceReady: Boolean(configuration.inferenceApiBaseUrl) };
     }),
     validate: publicProcedure.input(z.object({ files: z.array(clinicalFileInput).min(1).max(4).superRefine((files, issue) => { if (new Set(files.map((file) => file.modality)).size !== files.length) issue.addIssue({ code: "custom", message: "Each MRI modality can only be uploaded once." }); }) })).mutation(async ({ ctx, input }) => {
       const token = readDemoVisitorToken(ctx.req.headers.cookie) ?? createDemoVisitorToken();
@@ -145,7 +151,7 @@ export const appRouter = router({
       const visitor = await getOrCreateDemoVisitor(tokenHash, demoIpHash(ctx.req.ip), bindingHash);
       if (visitor.usedAt) throw new TRPCError({ code: "FORBIDDEN", message: "Your free analysis has been used. Create an account to continue using NeuroScan AI." });
       let inspection;
-      try { inspection = inspectClinicalUploads(input.files); } catch { throw new TRPCError({ code: "BAD_REQUEST", message: "File validation failed. The selected file could not be verified as a supported compressed MRI file." }); }
+      try { inspection = inspectClinicalUploads(input.files); } catch (error) { throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error && error.message.startsWith("This MRI file exceeds") ? error.message : "File validation failed. The selected file could not be verified as a supported compressed MRI file." }); }
       if (!inspection.complete) throw new TRPCError({ code: "BAD_REQUEST", message: "This MRI study is incomplete. Add missing modalities and resolve duplicate selections before running the demo." });
       return { ready: true, detected: inspection.files.map((file) => ({ modality: file.modality, fileName: file.fileName, metadata: file.metadata })) };
     }),
@@ -268,6 +274,24 @@ export const appRouter = router({
   }),
   analysis: router({
     list: clinicianProcedure.query(({ ctx }) => listAnalysisJobs(ctx.clinician.id)),
+    durableForStudy: clinicianProcedure.input(z.object({ studyId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      requireFound(await getStudyOwned(ctx.clinician.id, input.studyId), "Study");
+      return { jobs: await listDurableAnalysisJobsOwned(ctx.clinician.id, input.studyId) };
+    }),
+    durableJob: clinicianProcedure.input(z.object({ jobKey: z.string().trim().length(32) })).query(async ({ ctx, input }) => ({ job: requireFound(await getDurableAnalysisJobOwned(ctx.clinician.id, input.jobKey), "Analysis job") })),
+    startDurable: clinicianProcedure.input(z.object({ studyId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const study = requireFound(await getStudyOwned(ctx.clinician.id, input.studyId), "Study");
+      const expected = ["t1", "t1ce", "t2", "flair"] as const;
+      if (expected.some((modality) => !study.files.some((file) => file.modality === modality && file.uploadStatus === "uploaded" && isNiftiSpatialMetadata(file.metadata)))) throw new TRPCError({ code: "BAD_REQUEST", message: "This study requires complete validated T1, T1CE, T2, and FLAIR NIfTI volumes before analysis can start." });
+      return createDurableAnalysisJob(ctx.clinician.id, input.studyId);
+    }),
+    retryDurable: clinicianProcedure.input(z.object({ jobKey: z.string().trim().length(32) })).mutation(async ({ ctx, input }) => {
+      const recovered = requireFound(await getDurableAnalysisJobOwned(ctx.clinician.id, input.jobKey), "Analysis job");
+      if (!["failed", "retryable"].includes(recovered.job.status)) throw new TRPCError({ code: "BAD_REQUEST", message: "Only failed or retryable jobs can be resumed." });
+      if (await finalizeDurableResultCheckpoint(ctx.clinician.id, input.jobKey)) return { jobKey: recovered.job.jobKey, finalizedCheckpoint: true };
+      await transitionDurableAnalysisJob(recovered.job.id, { status: "queued", message: "Recovery requested. The worker will validate the existing stored MRI volumes before continuing." });
+      return { jobKey: recovered.job.jobKey, finalizedCheckpoint: false };
+    }),
     prepareReal: clinicianProcedure.input(z.object({ studyId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const ownedStudy = requireFound(await getStudyOwned(ctx.clinician.id, input.studyId), "Study");
       const expected = ["t1", "t1ce", "t2", "flair"] as const;

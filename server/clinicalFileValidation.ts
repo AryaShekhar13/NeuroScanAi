@@ -27,8 +27,10 @@ function positiveEnv(name: string, fallback: number) {
 }
 
 export function uploadLimits() {
+  const configuredMegabytes = Number(process.env.MAX_MRI_UPLOAD_MB);
+  const maxSingleFileSize = Number.isInteger(configuredMegabytes) && configuredMegabytes > 0 ? configuredMegabytes * 1024 * 1024 : positiveEnv("MAX_SINGLE_FILE_SIZE", FALLBACK_SINGLE_FILE_LIMIT);
   return {
-    maxSingleFileSize: positiveEnv("MAX_SINGLE_FILE_SIZE", FALLBACK_SINGLE_FILE_LIMIT),
+    maxSingleFileSize,
     maxStudySize: positiveEnv("MAX_STUDY_SIZE", FALLBACK_STUDY_LIMIT),
     maxFolderFiles: positiveEnv("MAX_FOLDER_FILES", FALLBACK_FOLDER_LIMIT),
   };
@@ -91,7 +93,9 @@ function decodeCompressedNifti(payload: Pick<ClinicalUploadPayload, "fileName" |
   if (!allowedMimeTypes.has(payload.mimeType.toLowerCase()) || !/^[A-Za-z0-9+/=]+$/.test(payload.base64)) throw new Error("File validation failed.");
   const compressedBytes = Buffer.from(payload.base64, "base64");
   const { maxSingleFileSize } = uploadLimits();
-  if (!compressedBytes.length || compressedBytes.length > maxSingleFileSize || compressedBytes[0] !== 0x1f || compressedBytes[1] !== 0x8b) throw new Error("File validation failed.");
+  if (!compressedBytes.length) throw new Error("File validation failed.");
+  if (compressedBytes.length > maxSingleFileSize) throw new Error("This MRI file exceeds the maximum allowed upload size.");
+  if (compressedBytes[0] !== 0x1f || compressedBytes[1] !== 0x8b) throw new Error("File validation failed.");
   let niftiBytes: Uint8Array;
   try { niftiBytes = gunzipSync(compressedBytes, { maxOutputLength: MAX_DECOMPRESSED_NIFTI_BYTES }); } catch { throw new Error("File validation failed."); }
   const validationBytes = Buffer.from(niftiBytes);

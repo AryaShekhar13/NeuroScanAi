@@ -1,4 +1,5 @@
 import { gzipSync } from "node:zlib";
+import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { assertNiftiSpatialCompatibility, decodeClinicalUpload, decodeSegmentationNifti, detectMriModality, inspectClinicalUploads, isNiftiSpatialMetadata, MAX_DECOMPRESSED_NIFTI_BYTES } from "./clinicalFileValidation";
 
@@ -62,5 +63,16 @@ describe("hardened clinical NIfTI validation", () => {
     expect(isNiftiSpatialMetadata(metadata)).toBe(true);
     expect(isNiftiSpatialMetadata({ ...metadata, sformRows: [0, 0, 0] })).toBe(false);
     expect(isNiftiSpatialMetadata({ ...metadata, voxelSpacing: [1, 1, 0] })).toBe(false);
+  });
+  it("uses the deployment-configured MRI upload cap and rejects an oversized file before decompression or inference", () => {
+    const previous = process.env.MAX_MRI_UPLOAD_MB;
+    process.env.MAX_MRI_UPLOAD_MB = "1";
+    try {
+      const oversized = gzipSync(randomBytes(1024 * 1024 + 1024));
+      expect(() => decodeClinicalUpload(upload("large_t1.nii.gz", oversized))).toThrow("This MRI file exceeds the maximum allowed upload size.");
+    } finally {
+      if (previous === undefined) delete process.env.MAX_MRI_UPLOAD_MB;
+      else process.env.MAX_MRI_UPLOAD_MB = previous;
+    }
   });
 });

@@ -16,3 +16,11 @@ export function ClinicianRouteGuard({ children }: { children: React.ReactNode })
   if (loading || !clinician) return <div className="clinical-gate" aria-live="polite">Verifying secure session…</div>;
   return <>{children}</>;
 }
+
+export function ClinicianAdminRouteGuard({ children }: { children: React.ReactNode }) {
+  const { clinician, loading } = useClinicianAuth();
+  useEffect(() => { if (!loading && !clinician) window.location.replace("/login"); else if (!loading && clinician?.role !== "admin") window.location.replace("/app"); }, [clinician, loading]);
+  if (loading || !clinician) return <div className="clinical-gate" aria-live="polite">Verifying administrator authorization…</div>;
+  if (clinician.role !== "admin") return <div className="clinical-gate" role="alert">Administrator authorization is required.</div>;
+  return <>{children}</>;
+}

@@ -43,6 +43,13 @@
       "when": 1787547750105,
       "tag": "0005_serious_bastion",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1787551044863,
+      "tag": "0006_good_vermin",
+      "breakpoints": true
     }
   ]
 }

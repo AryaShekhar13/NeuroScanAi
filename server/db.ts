@@ -12,6 +12,7 @@ import {
   patients,
   studies,
   studyFiles,
+  systemConfigurations,
   users,
   workspaceFiles,
 } from "../drizzle/schema";
@@ -61,12 +62,47 @@ export async function getClinicianByEmail(email: string) {
   return (await db.select().from(clinicianAccounts).where(eq(clinicianAccounts.email, email.toLowerCase())).limit(1))[0];
 }
 
-export async function createClinician(input: { email: string; passwordHash: string; fullName: string; professionalRole: string; institution: string }) {
+export async function createClinician(input: { email: string; passwordHash: string; fullName: string; professionalRole: string; institution: string; role?: "clinician" | "admin" }) {
   const db = requireDb(await getDb());
   const result = await db.insert(clinicianAccounts).values({ ...input, email: input.email.toLowerCase() });
   const id = Number(result[0].insertId);
   await createAuditLog(id, "account.created", "clinicianAccount", String(id));
   return (await getClinicianById(id))!;
+}
+
+export async function ensureInitialAdminAccount(input: { email: string; passwordHash: string }) {
+  const existing = await getClinicianByEmail(input.email);
+  const db = requireDb(await getDb());
+  if (existing) {
+    if (existing.role !== "admin") await db.update(clinicianAccounts).set({ role: "admin" }).where(eq(clinicianAccounts.id, existing.id));
+    return { account: await getClinicianById(existing.id), created: false };
+  }
+  const result = await db.insert(clinicianAccounts).values({ email: input.email.toLowerCase(), passwordHash: input.passwordHash, role: "admin", fullName: "NeuroScan Administrator", professionalRole: "System Administrator", institution: "NeuroScan AI" });
+  const id = Number(result[0].insertId);
+  await createAuditLog(id, "ADMIN_ACCOUNT_INITIALIZED", "clinicianAccount", String(id));
+  return { account: await getClinicianById(id), created: true };
+}
+
+export async function getSystemConfiguration() {
+  const db = requireDb(await getDb());
+  await db.insert(systemConfigurations).values({ id: 1 }).onDuplicateKeyUpdate({ set: { id: 1 } });
+  return (await db.select().from(systemConfigurations).where(eq(systemConfigurations.id, 1)).limit(1))[0]!;
+}
+
+export async function updateSystemConfiguration(adminId: number, inferenceApiBaseUrl: string) {
+  const db = requireDb(await getDb());
+  await getSystemConfiguration();
+  await db.update(systemConfigurations).set({ inferenceApiBaseUrl, lastApiCheckStatus: "unknown", lastApiCheckAt: null, lastApiCheckMessage: null, modelName: null, modelVersion: null, updatedBy: adminId }).where(eq(systemConfigurations.id, 1));
+  await createAuditLog(adminId, "MRI_API_URL_UPDATED", "systemConfiguration", "1");
+  return getSystemConfiguration();
+}
+
+export async function recordSystemApiCheck(adminId: number, input: { status: "online" | "offline"; message: string; modelName?: string | null; modelVersion?: string | null }) {
+  const db = requireDb(await getDb());
+  await getSystemConfiguration();
+  await db.update(systemConfigurations).set({ lastApiCheckAt: new Date(), lastApiCheckStatus: input.status, lastApiCheckMessage: input.message.slice(0, 240), modelName: input.modelName ?? null, modelVersion: input.modelVersion ?? null, updatedBy: adminId }).where(eq(systemConfigurations.id, 1));
+  await createAuditLog(adminId, "MRI_API_CONNECTION_TESTED", "systemConfiguration", "1", { status: input.status });
+  return getSystemConfiguration();
 }
 
 export async function touchClinicianLogin(id: number) {
@@ -235,6 +271,16 @@ export async function getDashboardMetrics(ownerId: number) {
   const [completedCount] = await db.select({ value: count() }).from(analysisJobs).where(and(eq(analysisJobs.createdBy, ownerId), eq(analysisJobs.status, "completed")));
   const [needsReviewCount] = await db.select({ value: count() }).from(studies).where(and(eq(studies.createdBy, ownerId), eq(studies.status, "needs_review")));
   return { patients: patientCount?.value ?? 0, studies: studyCount?.value ?? 0, completed: completedCount?.value ?? 0, needsReview: needsReviewCount?.value ?? 0 };
+}
+
+export async function getAdminSystemOverview() {
+  const db = requireDb(await getDb());
+  const [clinicianCount] = await db.select({ value: count() }).from(clinicianAccounts);
+  const [studyCount] = await db.select({ value: count() }).from(studies);
+  const [jobCount] = await db.select({ value: count() }).from(analysisJobs);
+  const [errorCount] = await db.select({ value: count() }).from(analysisJobs).where(eq(analysisJobs.status, "failed"));
+  const recentJobs = await db.select().from(analysisJobs).orderBy(desc(analysisJobs.submittedAt)).limit(8);
+  return { clinicians: clinicianCount?.value ?? 0, studies: studyCount?.value ?? 0, jobs: jobCount?.value ?? 0, failedJobs: errorCount?.value ?? 0, recentJobs };
 }
 
 export async function createAccessRequest(input: { name: string; email: string; company?: string; message?: string }) {

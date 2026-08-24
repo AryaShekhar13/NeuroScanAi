@@ -6,9 +6,11 @@ import {
   consumePasswordReset,
   createAccessRequest,
   createAuditLog,
+  getAdminSystemOverview,
   createClinician,
   createMockAnalysis,
   recordAuthoritativeNiftiSegmentation,
+  recordSystemApiCheck,
   createPatient,
   createStudy,
   createWorkspaceFile,
@@ -16,6 +18,7 @@ import {
   getClinicianByEmail,
   getDashboardMetrics,
   getPatientOwned,
+  getSystemConfiguration,
   getStudyOwned,
   invalidateClinicianSessions,
   listAnalysisJobs,
@@ -27,6 +30,7 @@ import {
   setPasswordReset,
   touchClinicianLogin,
   updateClinicianPasswordHash,
+  updateSystemConfiguration,
 } from "./db";
 import {
   clearClinicianSessionCookie,
@@ -48,8 +52,9 @@ import { sendPasswordResetEmail } from "./emailService";
 import { getGuestScanStatus } from "./guestScanLifecycle";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { clinicianProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { clinicianAdminProcedure, clinicianProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { decodeUpload } from "./fileValidation";
+import { normalizeMriApiBaseUrl, runConfiguredMriInference, testMriApiConnection } from "./mriApiConfig";
 import { storageGetSignedUrl, storagePut } from "./storage";
 
 const optionalShortText = (max: number) => z.string().trim().max(max).optional();
@@ -64,7 +69,7 @@ const demoInferenceCompletionInput = z.object({ files: z.array(demoInferenceFile
 }) });
 const segmentationNiftiInput = z.object({ studyId: z.number().int().positive(), fileName: z.string().trim().min(1).max(255), mimeType: z.string().trim().max(150).default("application/gzip"), base64: z.string().min(4).max(11_200_000) });
 
-function clinicianView(clinician: { id: number; email: string; fullName: string; professionalRole: string; institution: string }) { return { id: clinician.id, email: clinician.email, fullName: clinician.fullName, professionalRole: clinician.professionalRole, institution: clinician.institution }; }
+function clinicianView(clinician: { id: number; email: string; role: "clinician" | "admin"; fullName: string; professionalRole: string; institution: string }) { return { id: clinician.id, email: clinician.email, role: clinician.role, fullName: clinician.fullName, professionalRole: clinician.professionalRole, institution: clinician.institution }; }
 function requireFound<T>(value: T | undefined, resource = "Record"): T { if (!value) throw new TRPCError({ code: "NOT_FOUND", message: `${resource} not found or not authorized.` }); return value; }
 function rateKey(scope: string, emailOrToken: string, ip: string | undefined) { return hashRateLimitKey(scope, `${emailOrToken}|${ip ?? "unknown"}`); }
 function demoIpHash(ip: string | undefined) { return hashRateLimitKey("demo-ip", ip ?? "unknown"); }
@@ -179,6 +184,40 @@ export const appRouter = router({
     }),
   }),
   dashboard: router({ summary: clinicianProcedure.query(async ({ ctx }) => ({ metrics: await getDashboardMetrics(ctx.clinician.id), recentStudies: (await listStudies(ctx.clinician.id)).slice(0, 5) })) }),
+  admin: router({
+    overview: clinicianAdminProcedure.query(async () => {
+      const [configuration, overview] = await Promise.all([getSystemConfiguration(), getAdminSystemOverview()]);
+      return { configuration, overview };
+    }),
+    settings: clinicianAdminProcedure.query(async () => ({ configuration: await getSystemConfiguration() })),
+    updateApiUrl: clinicianAdminProcedure.input(z.object({ apiUrl: z.string().trim().min(8).max(512) })).mutation(async ({ ctx, input }) => {
+      let apiUrl: string;
+      try { apiUrl = normalizeMriApiBaseUrl(input.apiUrl); } catch (error) { throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Enter a valid HTTPS MRI API URL." }); }
+      return { configuration: await updateSystemConfiguration(ctx.clinician.id, apiUrl) };
+    }),
+    testApiConnection: clinicianAdminProcedure.mutation(async ({ ctx }) => {
+      const configuration = await getSystemConfiguration();
+      if (!configuration.inferenceApiBaseUrl) throw new TRPCError({ code: "BAD_REQUEST", message: "Save an MRI API URL before testing the connection." });
+      try {
+        const result = await testMriApiConnection(configuration.inferenceApiBaseUrl);
+        return { configuration: await recordSystemApiCheck(ctx.clinician.id, result) };
+      } catch {
+        return { configuration: await recordSystemApiCheck(ctx.clinician.id, { status: "offline", message: "Health check could not reach the configured MRI API." }) };
+      }
+    }),
+  }),
+  inference: router({
+    runGuest: publicProcedure.input(z.object({ files: z.array(clinicalFileInput).length(4).superRefine((files, issue) => { const expected = ["t1", "t1ce", "t2", "flair"]; if (new Set(files.map((file) => file.modality)).size !== expected.length || !expected.every((modality) => files.some((file) => file.modality === modality))) issue.addIssue({ code: "custom", message: "A complete MRI study requires T1, T1CE, T2, and FLAIR files." }); }) })).mutation(async ({ ctx, input }) => {
+      const token = readDemoVisitorToken(ctx.req.headers.cookie) ?? createDemoVisitorToken();
+      if (!readDemoVisitorToken(ctx.req.headers.cookie)) setDemoVisitorCookie(ctx.res, token);
+      const visitor = await getOrCreateDemoVisitor(hashDemoVisitorToken(token), demoIpHash(ctx.req.ip), demoVisitorBindingHash(ctx.req.ip, ctx.req.headers["user-agent"]));
+      if (visitor.usedAt) throw new TRPCError({ code: "FORBIDDEN", message: "Your free analysis has been used. Create an account to continue using NeuroScan AI." });
+      const configuration = await getSystemConfiguration();
+      if (!configuration.inferenceApiBaseUrl) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "The NIfTI inference service is currently unavailable." });
+      try { return await runConfiguredMriInference(configuration.inferenceApiBaseUrl, input.files); }
+      catch { throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "The NIfTI inference service is currently unavailable." }); }
+    }),
+  }),
   patients: router({
     list: clinicianProcedure.input(z.object({ search: z.string().trim().max(160).optional() }).optional()).query(({ ctx, input }) => listPatients(ctx.clinician.id, input?.search)),
     create: clinicianProcedure.input(z.object({ patientReference: z.string().trim().min(2).max(80), displayName: z.string().trim().min(2).max(160) })).mutation(async ({ ctx, input }) => ({ patient: await createPatient(ctx.clinician.id, input) })),

@@ -96,3 +96,14 @@
 - [x] Add router-level verification that the same guest cookie remains eligible through preparation and becomes persistently consumed only at successful completion.
 - [x] Export the current NeuroScan project to the approved GitHub repository and verify the pushed revision.
 - [x] Read back the GitHub `main` revision and confirm it matches the local NeuroScan project commit.
+- [x] Audit existing authentication, roles, sessions, inference configuration, and routes for secure administrator integration.
+- [x] Add an idempotent secret-driven administrator initialization path that stores only a password hash and never overwrites an existing account password.
+- [x] Persist server-side MRI API configuration, health-check state, model metadata, and administrative audit data without exposing the upstream URL to the client.
+- [x] Enforce administrator authorization on all configuration and dashboard server procedures, plus `/admin` and `/admin/settings` routes.
+- [x] Build the clinical-styled administrator dashboard with API management, connection testing, inference and user/scan overview, and basic system status.
+- [x] Document required secret names in the deployment guide and test credential safety, authorization denial, initialization idempotence, and API configuration behavior.
+- [x] Add regression coverage for existing-administrator initialization and admin-only server-side MRI API configuration updates and health records.
+- [x] Verify signed-in administrator route access and configuration controls without calling the inactive external MRI service.
+- [x] Preserve the MRI API endpoint as unset while keeping the administrator save-and-test workflow ready for a future real HTTPS URL.
+- [x] Publish the secure administrator release with the MRI inference service clearly awaiting API configuration.
+- [x] Verify the administrator release in the browser and publish the completed secure configuration workflow.

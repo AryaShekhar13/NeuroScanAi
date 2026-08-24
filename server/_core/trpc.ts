@@ -37,6 +37,15 @@ const requireClinician = t.middleware(async opts => {
 
 export const clinicianProcedure = t.procedure.use(requireClinician);
 
+export const clinicianAdminProcedure = t.procedure.use(
+  t.middleware(async opts => {
+    const { ctx, next } = opts;
+    if (!ctx.clinician) throw new TRPCError({ code: "UNAUTHORIZED", message: "Please sign in to your clinical workspace." });
+    if (ctx.clinician.role !== "admin") throw new TRPCError({ code: "FORBIDDEN", message: "Administrator authorization is required." });
+    return next({ ctx: { ...ctx, clinician: ctx.clinician } });
+  }),
+);
+
 export const adminProcedure = t.procedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;

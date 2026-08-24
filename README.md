@@ -14,11 +14,15 @@ Set production configuration through the project secret manager; do **not** comm
 | `SMTP_USERNAME` | Yes for reset delivery | SMTP service account username. |
 | `SMTP_PASSWORD` | Yes for reset delivery | SMTP service account password or provider-issued app password. |
 | `SMTP_FROM` | Yes for reset delivery | Verified sender address, for example `NeuroScan AI <security@example.org>`. |
+| `ADMIN_EMAIL` | Yes for initial admin setup | Initial clinical administrator email. The server initializes this account only if absent. |
+| `ADMIN_INITIAL_PASSWORD` | Yes for initial admin setup | One-time administrator password supplied through secure deployment secrets. Only a bcrypt hash is stored; existing passwords are never overwritten. |
 | `MAX_SINGLE_FILE_SIZE` | Recommended | Maximum compressed upload size in bytes for one NIfTI file. Defaults to `8388608` (8 MiB). |
 | `MAX_STUDY_SIZE` | Recommended | Maximum total compressed upload size in bytes for one study. Defaults to `33554432` (32 MiB). |
 | `MAX_FOLDER_FILES` | Recommended | Maximum number of files examined in a selected folder. Defaults to `200`. |
 
 The platform supplies `DATABASE_URL`, `JWT_SECRET`, and managed object-storage credentials. They must remain platform-managed and must not be copied into a local configuration file.
+
+MRI inference endpoints are managed by authenticated clinical administrators at `/admin/settings`. The URL is stored server-side, is never returned to ordinary users or guests, and can be tested and changed without a frontend code change or redeployment. Do not put an upstream MRI API URL in a `VITE_` variable.
 
 ## Security and upload controls
 

@@ -13,7 +13,9 @@ import SettingsPage from "@/pages/SettingsPage";
 import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
 import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import DemoPage from "@/pages/DemoPage";
-import { ClinicianRouteGuard } from "@/hooks/useClinicianAuth";
+import AdminPage from "@/pages/AdminPage";
+import AdminSettingsPage from "@/pages/AdminSettingsPage";
+import { ClinicianAdminRouteGuard, ClinicianRouteGuard } from "@/hooks/useClinicianAuth";
 import { PageMotion } from "@/components/PageMotion";
 import Home from "@/pages/Home";
 import { Route, Switch } from "wouter";
@@ -33,6 +35,8 @@ function Router() {
     <Route path="/studies/:id">{() => <ClinicianRouteGuard><StudyViewerPage /></ClinicianRouteGuard>}</Route>
     <Route path="/analysis">{() => <ClinicianRouteGuard><AnalysisPage /></ClinicianRouteGuard>}</Route>
     <Route path="/settings">{() => <ClinicianRouteGuard><SettingsPage /></ClinicianRouteGuard>}</Route>
+    <Route path="/admin">{() => <ClinicianAdminRouteGuard><AdminPage /></ClinicianAdminRouteGuard>}</Route>
+    <Route path="/admin/settings">{() => <ClinicianAdminRouteGuard><AdminSettingsPage /></ClinicianAdminRouteGuard>}</Route>
     <Route path="/login">{() => <AuthPage mode="login" />}</Route>
     <Route path="/signup">{() => <AuthPage mode="signup" />}</Route>
     <Route path="/forgot-password" component={ForgotPasswordPage} />

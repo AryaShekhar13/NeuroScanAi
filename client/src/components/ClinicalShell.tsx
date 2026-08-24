@@ -2,12 +2,13 @@ import { LogOut } from "lucide-react";
 import { NeuroLogo } from "@/components/NeuroLogo";
 import { useClinicianAuth } from "@/hooks/useClinicianAuth";
 
-const links = [
+const baseLinks = [
   ["Dashboard", "/app"], ["Patients", "/patients"], ["MRI Studies", "/studies"], ["Analysis", "/analysis"], ["Settings", "/settings"],
 ] as const;
 
 export default function ClinicalShell({ active, children }: { active: string; children: React.ReactNode }) {
   const { clinician, logout, loggingOut } = useClinicianAuth();
+  const links = clinician?.role === "admin" ? [...baseLinks, ["Admin", "/admin"] as const] : baseLinks;
   return <div className="clinical-page app-shell">
     <header className="clinical-header">
       <a href="/" className="clinical-brand"><NeuroLogo /></a>

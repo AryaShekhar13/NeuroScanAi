@@ -18,6 +18,7 @@ export const clinicianAccounts = mysqlTable("clinicianAccounts", {
   id: int("id").autoincrement().primaryKey(),
   email: varchar("email", { length: 320 }).notNull().unique(),
   passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
+  role: mysqlEnum("role", ["clinician", "admin"]).default("clinician").notNull(),
   fullName: varchar("fullName", { length: 160 }).notNull(),
   professionalRole: varchar("professionalRole", { length: 160 }).notNull(),
   institution: varchar("institution", { length: 200 }).notNull(),
@@ -26,6 +27,20 @@ export const clinicianAccounts = mysqlTable("clinicianAccounts", {
   resetTokenUsedAt: timestamp("resetTokenUsedAt"),
   sessionVersion: int("sessionVersion").default(1).notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+/** Singleton configuration. The configurable upstream MRI URL remains server-only. */
+export const systemConfigurations = mysqlTable("systemConfigurations", {
+  id: int("id").primaryKey(),
+  inferenceApiBaseUrl: varchar("inferenceApiBaseUrl", { length: 512 }),
+  lastApiCheckAt: timestamp("lastApiCheckAt"),
+  lastApiCheckStatus: mysqlEnum("lastApiCheckStatus", ["unknown", "online", "offline"]).default("unknown").notNull(),
+  lastApiCheckMessage: varchar("lastApiCheckMessage", { length: 240 }),
+  modelName: varchar("modelName", { length: 160 }),
+  modelVersion: varchar("modelVersion", { length: 100 }),
+  updatedBy: int("updatedBy").references(() => clinicianAccounts.id, { onDelete: "set null" }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

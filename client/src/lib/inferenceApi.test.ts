@@ -1,19 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { getInferenceApiBaseUrl, parseNiftiSegmentationResponse } from "./inferenceApi";
+import { encodeNiftiForServer, parseNiftiSegmentationResponse } from "./inferenceApi";
 
-describe("configured inference API", () => {
-  it("provides an HTTPS inference base URL", () => {
-    const baseUrl = process.env.VITE_INFERENCE_API_BASE;
-    expect(baseUrl).toMatch(/^https:\/\//);
-  });
-
-  it("derives the documented health endpoint without requiring a live service", () => {
-    const baseUrl = process.env.VITE_INFERENCE_API_BASE;
-    expect(new URL("/health", baseUrl).toString()).toMatch(/^https:\/\/.+\/health$/);
-  });
-
-  it("uses the required public endpoint for the browser-side inference client", () => {
-    expect(getInferenceApiBaseUrl()).toBe(process.env.VITE_INFERENCE_API_BASE);
+describe("server-managed inference contract", () => {
+  it("serializes NIfTI bytes for the application server without exposing an upstream URL", async () => {
+    const encoded = await encodeNiftiForServer(new File([new Uint8Array([1, 2, 3])], "study.nii.gz", { type: "application/gzip" }));
+    expect(encoded).toEqual({ fileName: "study.nii.gz", mimeType: "application/gzip", base64: "AQID" });
   });
 
   it("requires a compressed NIfTI mask payload and never accepts a PNG visualization as the authoritative result", () => {

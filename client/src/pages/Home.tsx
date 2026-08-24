@@ -87,8 +87,14 @@ export default function Home() {
         </section>
 
         <section className="neuro-workflow neuro-section" id="workflow" aria-labelledby="workflow-title" data-scroll-reveal>
-          <p className="amber-label">SIMPLE WORKFLOW</p><h2 id="workflow-title">From image to clinical review.</h2>
-          <ol>{[["01", "Upload MRI"], ["02", "AI analysis"], ["03", "Segmentation"], ["04", "Clinical review"]].map(([number, label]) => <li key={number}><span>{number}</span><p>{label}</p></li>)}</ol>
+          <p className="amber-label">NIFTI-FIRST WORKFLOW</p><h2 id="workflow-title">From MRI upload to clinical review.</h2>
+          <p className="workflow-intro">Four original MRI volumes remain the study source. Analysis and segmentation stay traceable to the study, while the clinician controls final review.</p>
+          <ol>
+            <li><span>01</span><p>MRI upload</p><small><b>4 required inputs</b><br />T1 · T1CE · T2 · FLAIR<br />Compressed `.nii.gz` volumes</small></li>
+            <li><span>02</span><p>Analysis</p><small><b>Persistent job status</b><br />Saved stages and recovery<br />Runs when the MRI API is configured</small></li>
+            <li><span>03</span><p>Segmentation</p><small><b>3D NIfTI mask</b><br />Spatially validated against sources<br />PNG is a display preview only</small></li>
+            <li><span>04</span><p>Clinical review</p><small><b>Clinician-controlled</b><br />Slice navigation and overlays<br />No automated clinical conclusion</small></li>
+          </ol>
         </section>
 
         <section className="neuro-final-cta neuro-section" aria-labelledby="final-title" data-scroll-reveal>

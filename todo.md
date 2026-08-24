@@ -120,3 +120,4 @@
 - [ ] Replace the landing workspace section’s four modality categories with one truthful PNG derived from the supplied NIfTI source and authoritative tumor mask when available.
 - [x] Produce and label a single source-derived intensity-overlay preview for the landing workspace because no authoritative segmentation mask has yet been supplied.
 - [x] Replace the workspace preview with the user-supplied MRI segmentation comparison image.
+- [x] Update the lower landing-page workflow information with accurate MRI upload, analysis, segmentation, and clinical-review details.

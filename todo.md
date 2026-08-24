@@ -94,3 +94,5 @@
 - [x] Correct guest-scan persistence so eligibility is consumed only after a successful unauthenticated scan and remains consumed across later visits.
 - [x] Wire guest scan consumption to the post-success inference handoff and test the same-cookie eligible-to-consumed lifecycle.
 - [x] Add router-level verification that the same guest cookie remains eligible through preparation and becomes persistently consumed only at successful completion.
+- [x] Export the current NeuroScan project to the approved GitHub repository and verify the pushed revision.
+- [ ] Read back the GitHub `main` revision and confirm it matches the local NeuroScan project commit.

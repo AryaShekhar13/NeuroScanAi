@@ -86,3 +86,8 @@
 - [x] Replace the production-blocking base64 validation wait with a lightweight server-enforced one-time demo gate before direct real inference.
 - [x] Replace the protected study viewer’s Run Demo Analysis button with real inference using the study’s stored T1, T1CE, T2, and FLAIR NIfTI files.
 - [x] Render the returned real segmentation PNG and TC/WT/ET result summary in the authenticated study workspace without mock wording.
+- [x] Preserve original uploaded `.nii.gz` MRI volumes and their header/affine metadata as the authoritative study inputs.
+- [x] Persist the inference API’s returned 3D segmentation `.nii.gz` mask as the authoritative result and validate its dimensional and spatial compatibility with the input study.
+- [x] Generate aligned PNG slice previews and overlays only as derived viewer artifacts, never as the segmentation source of truth.
+- [x] Update the clinician viewer to select aligned 3D NIfTI slices and disclose that previews are derived from the stored NIfTI volumes and mask.
+- [x] Ensure the NIfTI-first storage and validation workflow is usable while the inference API is inactive, without requiring a PNG response or mock segmentation output.

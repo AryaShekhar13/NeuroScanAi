@@ -1,6 +1,6 @@
 import { gzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { decodeClinicalUpload, detectMriModality, inspectClinicalUploads, MAX_DECOMPRESSED_NIFTI_BYTES } from "./clinicalFileValidation";
+import { assertNiftiSpatialCompatibility, decodeClinicalUpload, decodeSegmentationNifti, detectMriModality, inspectClinicalUploads, isNiftiSpatialMetadata, MAX_DECOMPRESSED_NIFTI_BYTES } from "./clinicalFileValidation";
 
 function niftiFixture() {
   const bytes = Buffer.alloc(352);
@@ -40,5 +40,27 @@ describe("hardened clinical NIfTI validation", () => {
     expect(nested.relativePath).toBe("study/session-01/BraTS_001_t2.nii.gz");
     const oversized = Buffer.alloc(MAX_DECOMPRESSED_NIFTI_BYTES + 1); oversized.writeInt32LE(348, 0); oversized.write("n+1\0", 344, "latin1");
     expect(() => decodeClinicalUpload(upload("large_flair.nii.gz", gzipSync(oversized)))).toThrow("File validation failed");
+  });
+  it("treats a compressed NIfTI mask as authoritative only when its spatial grid and form metadata match the input MRI", () => {
+    const input = decodeClinicalUpload(upload("scan_t1.nii.gz", gzipSync(niftiFixture())));
+    const mask = decodeSegmentationNifti(upload("prediction.nii.gz", gzipSync(niftiFixture())));
+    expect(assertNiftiSpatialCompatibility(input.metadata, mask.metadata)).toBe(true);
+    expect(input.metadata).toMatchObject({ orientation: "little-endian", qformCode: 0, sformCode: 0, qformParameters: [0, 0, 0, 0, 0, 0, 0] });
+    const shifted = niftiFixture(); shifted.writeFloatLE(2, 80);
+    const misaligned = decodeSegmentationNifti(upload("prediction.nii.gz", gzipSync(shifted)));
+    expect(() => assertNiftiSpatialCompatibility(input.metadata, misaligned.metadata)).toThrow("spatial grid");
+  });
+  it("rejects returned masks with dimension, qform, or sform mismatches", () => {
+    const input = decodeClinicalUpload(upload("scan_t1.nii.gz", gzipSync(niftiFixture())));
+    const wrongDimensions = niftiFixture(); wrongDimensions.writeInt16LE(65, 42);
+    const wrongQform = niftiFixture(); wrongQform.writeInt16LE(1, 252);
+    const wrongSform = niftiFixture(); wrongSform.writeInt16LE(1, 254); wrongSform.writeFloatLE(1, 280);
+    [wrongDimensions, wrongQform, wrongSform].forEach((fixture) => expect(() => assertNiftiSpatialCompatibility(input.metadata, decodeSegmentationNifti(upload("prediction.nii.gz", gzipSync(fixture))).metadata)).toThrow("spatial grid"));
+  });
+  it("accepts only complete NIfTI spatial metadata records for stored studies", () => {
+    const metadata = decodeClinicalUpload(upload("scan_t1.nii.gz", gzipSync(niftiFixture()))).metadata;
+    expect(isNiftiSpatialMetadata(metadata)).toBe(true);
+    expect(isNiftiSpatialMetadata({ ...metadata, sformRows: [0, 0, 0] })).toBe(false);
+    expect(isNiftiSpatialMetadata({ ...metadata, voxelSpacing: [1, 1, 0] })).toBe(false);
   });
 });

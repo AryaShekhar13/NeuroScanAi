@@ -1,55 +1,27 @@
 export type InferenceModality = "t1" | "t1ce" | "t2" | "flair";
-export type PredictResult = {
+export type NiftiSegmentationResponse = {
   status: "success";
-  input_shape: [number, number, number];
-  tumor_voxels: { WT: number; TC: number; ET: number };
-  visualization: { data_url: string; type?: string; encoding?: string; slice_axis?: string; slice_index?: number };
+  input_shape?: [number, number, number];
+  tumor_voxels?: { WT: number; TC: number; ET: number };
+  segmentation_nifti: { file_name: string; content_type: "application/gzip" | "application/x-gzip"; base64: string };
 };
 
 const configuredBaseUrl = import.meta.env.VITE_INFERENCE_API_BASE?.replace(/\/+$/, "");
 const REQUEST_TIMEOUT_MS = 120_000;
 
-export function getInferenceApiBaseUrl() {
-  if (!configuredBaseUrl) throw new Error("The AI inference service is not configured.");
-  return configuredBaseUrl;
+export function getInferenceApiBaseUrl() { if (!configuredBaseUrl) throw new Error("The AI inference service is not configured."); return configuredBaseUrl; }
+
+function isBase64(value: unknown): value is string { return typeof value === "string" && value.length > 0 && /^[A-Za-z0-9+/=]+$/.test(value); }
+export function parseNiftiSegmentationResponse(value: unknown): NiftiSegmentationResponse {
+  const result = value as Partial<NiftiSegmentationResponse>;
+  if (result.status !== "success" || !result.segmentation_nifti || !result.segmentation_nifti.file_name.toLowerCase().endsWith(".nii.gz") || !isBase64(result.segmentation_nifti.base64) || !["application/gzip", "application/x-gzip"].includes(result.segmentation_nifti.content_type)) throw new Error("The AI inference service did not return an authoritative compressed NIfTI segmentation mask.");
+  return result as NiftiSegmentationResponse;
 }
 
-async function serviceError(response: Response) {
-  if (response.status === 413) return new Error("The MRI upload is too large for the inference service. Choose a smaller compressed study.");
-  if (response.status >= 500) return new Error("The AI inference service is temporarily unavailable. Please try again shortly.");
-  try {
-    const body = await response.json() as { detail?: unknown; message?: unknown };
-    const detail = typeof body.detail === "string" ? body.detail : typeof body.message === "string" ? body.message : null;
-    if (detail && detail.length <= 220 && !/[\\/]|checkpoint|model|path/i.test(detail)) return new Error(detail);
-  } catch { /* Use the clinical-safe fallback when no JSON error body is available. */ }
-  return new Error("The AI inference service could not accept this MRI study. Confirm all four compressed files are valid and try again.");
-}
-
-async function request(url: string, init?: RequestInit, timeout = REQUEST_TIMEOUT_MS) {
-  const signal = init?.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(timeout)]) : AbortSignal.timeout(timeout);
-  let response: Response;
-  try {
-    response = await fetch(url, { ...init, signal });
-  } catch (error) {
-    if (typeof error === "object" && error !== null && "name" in error && error.name === "TimeoutError") throw new Error("The AI inference service is taking longer than expected. Please try again later.");
-    throw error;
-  }
-  if (!response.ok) throw await serviceError(response);
-  return response;
-}
-
-export async function submitInference(files: Record<InferenceModality, File>, signal?: AbortSignal) {
-  const body = new FormData();
-  body.append("t1", files.t1, files.t1.name);
-  body.append("t1ce", files.t1ce, files.t1ce.name);
-  body.append("t2", files.t2, files.t2.name);
-  body.append("flair", files.flair, files.flair.name);
-  const response = await request(`${getInferenceApiBaseUrl()}/predict`, { method: "POST", body, signal });
-  const result = await response.json() as Partial<PredictResult>;
-  const hasVoxelSummary = result.tumor_voxels && ["WT", "TC", "ET"].every((key) => Number.isFinite(result.tumor_voxels?.[key as keyof PredictResult["tumor_voxels"]]));
-  const pngDataUrl = result.visualization?.data_url;
-  const hasVisualization = typeof pngDataUrl === "string" && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(pngDataUrl);
-  if (result.status !== "success" || !Array.isArray(result.input_shape) || result.input_shape.length !== 3 || !hasVoxelSummary) throw new Error("The AI inference service did not return a complete segmentation summary.");
-  if (!hasVisualization) throw new Error("The AI inference service did not return a segmentation visualization image.");
-  return result as PredictResult;
+export async function submitNiftiInference(files: Record<InferenceModality, File>, signal?: AbortSignal) {
+  const body = new FormData(); body.append("t1", files.t1, files.t1.name); body.append("t1ce", files.t1ce, files.t1ce.name); body.append("t2", files.t2, files.t2.name); body.append("flair", files.flair, files.flair.name);
+  const requestSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)]) : AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  const response = await fetch(`${getInferenceApiBaseUrl()}/predict`, { method: "POST", body, signal: requestSignal });
+  if (!response.ok) throw new Error(response.status >= 500 ? "The AI inference service is temporarily unavailable." : "The AI inference service could not accept this NIfTI study.");
+  return parseNiftiSegmentationResponse(await response.json());
 }

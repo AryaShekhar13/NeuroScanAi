@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/mysql2";
 import {
   accessRequests,
   analysisJobs,
+  analysisResults,
   auditLogs,
   authRateLimits,
   clinicianAccounts,
@@ -183,7 +184,8 @@ export async function getStudyOwned(ownerId: number, studyId: number) {
   if (!record) return undefined;
   const files = await db.select().from(studyFiles).where(eq(studyFiles.studyId, studyId));
   const jobs = await db.select().from(analysisJobs).where(eq(analysisJobs.studyId, studyId)).orderBy(desc(analysisJobs.submittedAt));
-  return { ...record, files, jobs };
+  const results = await db.select().from(analysisResults).innerJoin(analysisJobs, eq(analysisResults.analysisJobId, analysisJobs.id)).where(eq(analysisJobs.studyId, studyId)).orderBy(desc(analysisResults.createdAt));
+  return { ...record, files, jobs, results };
 }
 
 export async function createStudy(ownerId: number, input: { patientId: number; studyDate: Date; description?: string; files: Array<{ modality: "t1" | "t1ce" | "t2" | "flair"; originalFilename: string; storagePath: string; fileSize: number; mimeType: string; checksum: string; relativePath: string | null; uncompressedSize: number; metadata: Record<string, unknown> }> }) {
@@ -206,6 +208,19 @@ export async function createMockAnalysis(ownerId: number, studyId: number) {
   await db.update(studies).set({ status: "queued" }).where(eq(studies.id, studyId));
   await createAuditLog(ownerId, "ANALYSIS_MOCK_SUBMITTED", "analysisJob", String(id), { studyId });
   return (await db.select().from(analysisJobs).where(eq(analysisJobs.id, id)).limit(1))[0];
+}
+
+export async function recordAuthoritativeNiftiSegmentation(ownerId: number, input: { studyId: number; segmentationStoragePath: string; resultMetadata: Record<string, unknown> }) {
+  const db = requireDb(await getDb());
+  const study = await getStudyOwned(ownerId, input.studyId);
+  if (!study) throw new Error("Study not found or not authorized.");
+  const now = new Date();
+  const inserted = await db.insert(analysisJobs).values({ studyId: input.studyId, createdBy: ownerId, modelName: "ExternalNiftiSegmentation", modelVersion: "api-contract-pending", status: "completed", isDemo: 0, submittedAt: now, startedAt: now, completedAt: now });
+  const analysisJobId = Number(inserted[0].insertId);
+  const result = await db.insert(analysisResults).values({ analysisJobId, segmentationStoragePath: input.segmentationStoragePath, resultMetadata: input.resultMetadata });
+  await db.update(studies).set({ status: "completed" }).where(eq(studies.id, input.studyId));
+  await createAuditLog(ownerId, "NIFTI_SEGMENTATION_STORED", "analysisJob", String(analysisJobId), { studyId: input.studyId });
+  return { jobId: analysisJobId, resultId: Number(result[0].insertId) };
 }
 
 export async function listAnalysisJobs(ownerId: number) {

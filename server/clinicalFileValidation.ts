@@ -4,6 +4,16 @@ import { gunzipSync } from "node:zlib";
 export const MRI_MODALITIES = ["t1", "t1ce", "t2", "flair"] as const;
 export type MriModality = typeof MRI_MODALITIES[number];
 export type ClinicalUploadPayload = { fileName: string; mimeType: string; base64: string; relativePath?: string };
+export type NiftiSpatialMetadata = {
+  format: "NIfTI-1";
+  dimensions: [number, number, number];
+  voxelSpacing: [number, number, number];
+  orientation: "little-endian" | "big-endian";
+  qformCode: number;
+  sformCode: number;
+  qformParameters: [number, number, number, number, number, number, number];
+  sformRows: [number, number, number, number, number, number, number, number, number, number, number, number];
+};
 
 const FALLBACK_SINGLE_FILE_LIMIT = 8 * 1024 * 1024;
 const FALLBACK_STUDY_LIMIT = 32 * 1024 * 1024;
@@ -61,47 +71,73 @@ function isNiftiHeader(bytes: Buffer) {
   return magic.startsWith("n+1") || magic.startsWith("ni1");
 }
 
-function parseNiftiMetadata(bytes: Buffer) {
+export function parseNiftiMetadata(bytes: Buffer): NiftiSpatialMetadata {
   const littleEndian = bytes.readInt32LE(0) === 348;
   const readInt16 = (offset: number) => littleEndian ? bytes.readInt16LE(offset) : bytes.readInt16BE(offset);
   const readFloat = (offset: number) => littleEndian ? bytes.readFloatLE(offset) : bytes.readFloatBE(offset);
-  const dimensions = [readInt16(42), readInt16(44), readInt16(46)].filter((value) => value > 0);
-  const voxelSpacing = [readFloat(80), readFloat(84), readFloat(88)].filter((value) => Number.isFinite(value) && value > 0);
-  return { format: "NIfTI-1", dimensions, voxelSpacing, orientation: littleEndian ? "little-endian" : "big-endian" };
+  const dimensions = [readInt16(42), readInt16(44), readInt16(46)] as [number, number, number];
+  const voxelSpacing = [readFloat(80), readFloat(84), readFloat(88)] as [number, number, number];
+  if (dimensions.some((value) => value <= 0) || voxelSpacing.some((value) => !Number.isFinite(value) || value <= 0)) throw new Error("File validation failed.");
+  const qformParameters = [readFloat(256), readFloat(260), readFloat(264), readFloat(268), readFloat(272), readFloat(276), readFloat(76)] as NiftiSpatialMetadata["qformParameters"];
+  const sformRows = Array.from({ length: 12 }, (_, index) => readFloat(280 + index * 4)) as NiftiSpatialMetadata["sformRows"];
+  if ([...qformParameters, ...sformRows].some((value) => !Number.isFinite(value))) throw new Error("File validation failed.");
+  return { format: "NIfTI-1", dimensions, voxelSpacing, orientation: littleEndian ? "little-endian" : "big-endian", qformCode: readInt16(252), sformCode: readInt16(254), qformParameters, sformRows };
+}
+
+function decodeCompressedNifti(payload: Pick<ClinicalUploadPayload, "fileName" | "mimeType" | "base64">) {
+  const fileName = cleanClinicalFileName(payload.fileName);
+  if (!isNiftiFilename(fileName)) throw new Error("Unsupported file. Only compressed NIfTI (.nii.gz) files are accepted.");
+  const allowedMimeTypes = new Set(["", "application/octet-stream", "application/x-nifti", "application/gzip", "application/x-gzip"]);
+  if (!allowedMimeTypes.has(payload.mimeType.toLowerCase()) || !/^[A-Za-z0-9+/=]+$/.test(payload.base64)) throw new Error("File validation failed.");
+  const compressedBytes = Buffer.from(payload.base64, "base64");
+  const { maxSingleFileSize } = uploadLimits();
+  if (!compressedBytes.length || compressedBytes.length > maxSingleFileSize || compressedBytes[0] !== 0x1f || compressedBytes[1] !== 0x8b) throw new Error("File validation failed.");
+  let niftiBytes: Uint8Array;
+  try { niftiBytes = gunzipSync(compressedBytes, { maxOutputLength: MAX_DECOMPRESSED_NIFTI_BYTES }); } catch { throw new Error("File validation failed."); }
+  const validationBytes = Buffer.from(niftiBytes);
+  if (validationBytes.length > MAX_DECOMPRESSED_NIFTI_BYTES || !isNiftiHeader(validationBytes)) throw new Error("File validation failed.");
+  return { fileName, compressedBytes, validationBytes, checksum: createHash("sha256").update(compressedBytes).digest("hex"), metadata: parseNiftiMetadata(validationBytes) };
 }
 
 export function decodeClinicalUpload(payload: ClinicalUploadPayload) {
-  const fileName = cleanClinicalFileName(payload.fileName);
-  if (!isNiftiFilename(fileName)) throw new Error("Unsupported file. Only compressed NIfTI (.nii.gz) MRI files are accepted.");
-  const allowedMimeTypes = new Set(["", "application/octet-stream", "application/x-nifti", "application/gzip", "application/x-gzip"]);
-  if (!allowedMimeTypes.has(payload.mimeType.toLowerCase())) throw new Error("File validation failed.");
-  if (!/^[A-Za-z0-9+/=]+$/.test(payload.base64)) throw new Error("File validation failed.");
-  const compressedBytes = Buffer.from(payload.base64, "base64");
-  const { maxSingleFileSize } = uploadLimits();
-  if (!compressedBytes.length || compressedBytes.length > maxSingleFileSize) throw new Error("This MRI file exceeds the configured upload limit.");
-  const compressed = true;
-  let niftiBytes: Uint8Array = compressedBytes;
-  try {
-    if (compressed) {
-      if (compressedBytes[0] !== 0x1f || compressedBytes[1] !== 0x8b) throw new Error("not gzip");
-      niftiBytes = gunzipSync(compressedBytes, { maxOutputLength: MAX_DECOMPRESSED_NIFTI_BYTES });
-    }
-  } catch {
-    throw new Error("File validation failed.");
-  }
-  const validationBytes = Buffer.from(niftiBytes);
-  if (validationBytes.length > MAX_DECOMPRESSED_NIFTI_BYTES || !isNiftiHeader(validationBytes)) throw new Error("File validation failed.");
+  const decoded = decodeCompressedNifti(payload);
+  const { fileName, compressedBytes, validationBytes, checksum, metadata } = decoded;
   const modality = detectMriModality(fileName);
   if (!modality) throw new Error("Unsupported file. A T1, T1CE, T2, or FLAIR modality name is required.");
   return {
     fileName,
     modality,
     bytes: compressedBytes,
-    checksum: createHash("sha256").update(compressedBytes).digest("hex"),
+    checksum,
     uncompressedSize: validationBytes.byteLength,
     relativePath: cleanRelativePath(payload.relativePath),
-    metadata: parseNiftiMetadata(validationBytes),
+    metadata,
   };
+}
+
+export function decodeSegmentationNifti(payload: Pick<ClinicalUploadPayload, "fileName" | "mimeType" | "base64">) {
+  const decoded = decodeCompressedNifti(payload);
+  return { fileName: decoded.fileName, bytes: decoded.compressedBytes, checksum: decoded.checksum, uncompressedSize: decoded.validationBytes.byteLength, metadata: decoded.metadata };
+}
+
+function closeEnough(left: number, right: number) { return Math.abs(left - right) <= 0.0001; }
+
+export function assertNiftiSpatialCompatibility(input: NiftiSpatialMetadata, mask: NiftiSpatialMetadata) {
+  const sameDimensions = input.dimensions.every((value, index) => value === mask.dimensions[index]);
+  const sameSpacing = input.voxelSpacing.every((value, index) => closeEnough(value, mask.voxelSpacing[index]));
+  const sameQform = input.qformCode === mask.qformCode && input.qformParameters.every((value, index) => closeEnough(value, mask.qformParameters[index]));
+  const sameSform = input.sformCode === mask.sformCode && input.sformRows.every((value, index) => closeEnough(value, mask.sformRows[index]));
+  if (!sameDimensions || !sameSpacing || input.orientation !== mask.orientation || !sameQform || !sameSform) throw new Error("The segmentation mask does not match the input MRI spatial grid or orientation.");
+  return true;
+}
+
+export function isNiftiSpatialMetadata(value: unknown): value is NiftiSpatialMetadata {
+  if (!value || typeof value !== "object") return false;
+  const metadata = value as Partial<NiftiSpatialMetadata>;
+  return metadata.format === "NIfTI-1" && Array.isArray(metadata.dimensions) && metadata.dimensions.length === 3 && metadata.dimensions.every((item) => Number.isInteger(item) && item > 0)
+    && Array.isArray(metadata.voxelSpacing) && metadata.voxelSpacing.length === 3 && metadata.voxelSpacing.every((item) => typeof item === "number" && Number.isFinite(item) && item > 0)
+    && (metadata.orientation === "little-endian" || metadata.orientation === "big-endian") && typeof metadata.qformCode === "number" && typeof metadata.sformCode === "number"
+    && Array.isArray(metadata.qformParameters) && metadata.qformParameters.length === 7 && Array.isArray(metadata.sformRows) && metadata.sformRows.length === 12;
 }
 
 export function inspectClinicalUploads(files: ClinicalUploadPayload[]) {

@@ -8,6 +8,7 @@ import {
   createAuditLog,
   createClinician,
   createMockAnalysis,
+  recordAuthoritativeNiftiSegmentation,
   createPatient,
   createStudy,
   createWorkspaceFile,
@@ -42,7 +43,7 @@ import {
   readDemoVisitorToken,
   verifyPassword,
 } from "./clinicalAuth";
-import { decodeClinicalUpload, inspectClinicalUploads } from "./clinicalFileValidation";
+import { assertNiftiSpatialCompatibility, decodeClinicalUpload, decodeSegmentationNifti, inspectClinicalUploads, isNiftiSpatialMetadata } from "./clinicalFileValidation";
 import { sendPasswordResetEmail } from "./emailService";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -60,6 +61,7 @@ const demoInferenceCompletionInput = z.object({ files: z.array(demoInferenceFile
   const expected = ["t1", "t1ce", "t2", "flair"];
   if (new Set(files.map((file) => file.modality)).size !== expected.length || !expected.every((modality) => files.some((file) => file.modality === modality))) issue.addIssue({ code: "custom", message: "A complete MRI study requires T1, T1CE, T2, and FLAIR files." });
 }) });
+const segmentationNiftiInput = z.object({ studyId: z.number().int().positive(), fileName: z.string().trim().min(1).max(255), mimeType: z.string().trim().max(150).default("application/gzip"), base64: z.string().min(4).max(11_200_000) });
 
 function clinicianView(clinician: { id: number; email: string; fullName: string; professionalRole: string; institution: string }) { return { id: clinician.id, email: clinician.email, fullName: clinician.fullName, professionalRole: clinician.professionalRole, institution: clinician.institution }; }
 function requireFound<T>(value: T | undefined, resource = "Record"): T { if (!value) throw new TRPCError({ code: "NOT_FOUND", message: `${resource} not found or not authorized.` }); return value; }
@@ -234,6 +236,31 @@ export const appRouter = router({
       const files = await Promise.all(sourceFiles.map(async (file) => ({ modality: file!.modality, fileName: file!.originalFilename, mimeType: file!.mimeType, url: await storageGetSignedUrl(file!.storagePath) })));
       await createAuditLog(ctx.clinician.id, "CLINICAL_REAL_INFERENCE_PREPARED", "study", String(input.studyId), { modalityCount: files.length });
       return { files };
+    }),
+    viewerSources: clinicianProcedure.input(z.object({ studyId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      const ownedStudy = requireFound(await getStudyOwned(ctx.clinician.id, input.studyId), "Study");
+      const source = ownedStudy.files.find((file) => file.modality === "t1" && file.uploadStatus === "uploaded") ?? ownedStudy.files.find((file) => file.uploadStatus === "uploaded");
+      if (!source) throw new TRPCError({ code: "NOT_FOUND", message: "This study has no stored NIfTI source volume." });
+      const authoritativeResult = ownedStudy.results.find((entry) => Boolean(entry.analysisResults.segmentationStoragePath));
+      const resultMetadata = authoritativeResult?.analysisResults.resultMetadata;
+      const segmentationFileName = resultMetadata && typeof resultMetadata === "object" && "fileName" in resultMetadata && typeof resultMetadata.fileName === "string" ? resultMetadata.fileName : "segmentation-mask.nii.gz";
+      return {
+        source: { modality: source.modality, fileName: source.originalFilename, metadata: source.metadata, url: await storageGetSignedUrl(source.storagePath) },
+        segmentation: authoritativeResult?.analysisResults.segmentationStoragePath ? { fileName: segmentationFileName, metadata: resultMetadata, url: await storageGetSignedUrl(authoritativeResult.analysisResults.segmentationStoragePath) } : null,
+      };
+    }),
+    storeNiftiSegmentation: clinicianProcedure.input(segmentationNiftiInput).mutation(async ({ ctx, input }) => {
+      const ownedStudy = requireFound(await getStudyOwned(ctx.clinician.id, input.studyId), "Study");
+      const expected = ["t1", "t1ce", "t2", "flair"] as const;
+      const sources = expected.map((modality) => ownedStudy.files.find((file) => file.modality === modality && file.uploadStatus === "uploaded"));
+      if (sources.some((file) => !file) || sources.some((file) => !isNiftiSpatialMetadata(file!.metadata))) throw new TRPCError({ code: "BAD_REQUEST", message: "This study does not have complete validated NIfTI spatial metadata. Re-upload the source study before storing a segmentation mask." });
+      let segmentation: ReturnType<typeof decodeSegmentationNifti>;
+      try { segmentation = decodeSegmentationNifti(input); sources.forEach((source) => assertNiftiSpatialCompatibility(source!.metadata as import("./clinicalFileValidation").NiftiSpatialMetadata, segmentation.metadata)); }
+      catch (error) { throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error && error.message.includes("spatial grid") ? error.message : "The returned segmentation mask could not be validated as a compressed NIfTI file." }); }
+      const stored = await storagePut(`clinical/${ctx.clinician.id}/segmentation/${input.studyId}-${segmentation.checksum.slice(0, 12)}-${segmentation.fileName}`, segmentation.bytes, "application/gzip");
+      const resultMetadata = { authoritativeFormat: "NIfTI-1", authoritativeAsset: "segmentation-mask.nii.gz", checksum: segmentation.checksum, fileName: segmentation.fileName, uncompressedSize: segmentation.uncompressedSize, spatialMetadata: segmentation.metadata, previewPolicy: "Derived PNG previews only; not an authoritative segmentation asset." };
+      const recorded = await recordAuthoritativeNiftiSegmentation(ctx.clinician.id, { studyId: input.studyId, segmentationStoragePath: stored.key, resultMetadata });
+      return { ...recorded, segmentationStoragePath: stored.key, metadata: resultMetadata };
     }),
     submitMock: clinicianProcedure.input(z.object({ studyId: z.number().int().positive() })).mutation(async ({ ctx, input }) => ({ job: await createMockAnalysis(ctx.clinician.id, input.studyId), notice: "Demo / mock analysis only. No clinical inference has been performed." })),
   }),

@@ -121,3 +121,4 @@
 - [x] Produce and label a single source-derived intensity-overlay preview for the landing workspace because no authoritative segmentation mask has yet been supplied.
 - [x] Replace the workspace preview with the user-supplied MRI segmentation comparison image.
 - [x] Update the lower landing-page workflow information with accurate MRI upload, analysis, segmentation, and clinical-review details.
+- [x] Restyle the lower landing-page workflow as connected directional steps with arrows instead of a statistics-style grid.

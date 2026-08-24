@@ -90,10 +90,10 @@ export default function Home() {
           <p className="amber-label">NIFTI-FIRST WORKFLOW</p><h2 id="workflow-title">From MRI upload to clinical review.</h2>
           <p className="workflow-intro">Four original MRI volumes remain the study source. Analysis and segmentation stay traceable to the study, while the clinician controls final review.</p>
           <ol>
-            <li><span>01</span><p>MRI upload</p><small><b>4 required inputs</b><br />T1 · T1CE · T2 · FLAIR<br />Compressed `.nii.gz` volumes</small></li>
-            <li><span>02</span><p>Analysis</p><small><b>Persistent job status</b><br />Saved stages and recovery<br />Runs when the MRI API is configured</small></li>
-            <li><span>03</span><p>Segmentation</p><small><b>3D NIfTI mask</b><br />Spatially validated against sources<br />PNG is a display preview only</small></li>
-            <li><span>04</span><p>Clinical review</p><small><b>Clinician-controlled</b><br />Slice navigation and overlays<br />No automated clinical conclusion</small></li>
+            <li><span>01</span><div><p>MRI upload</p><small>Add the original T1, T1CE, T2, and FLAIR `.nii.gz` volumes to a study.</small></div></li>
+            <li><span>02</span><div><p>Analysis</p><small>Track the saved analysis job as it runs through the configured MRI service.</small></div></li>
+            <li><span>03</span><div><p>Segmentation</p><small>Store the returned 3D NIfTI mask after spatial validation against the source MRI.</small></div></li>
+            <li><span>04</span><div><p>Clinical review</p><small>Inspect aligned slices and overlays; the clinician makes the final judgment.</small></div></li>
           </ol>
         </section>
 
